@@ -6,9 +6,10 @@ include $(SHIPYARD_DIR)/Makefile.inc
 
 override CALCULATED_VERSION := $(shell . ${SCRIPTS_DIR}/lib/version; echo $$VERSION)
 VERSION ?= $(CALCULATED_VERSION)
+CUTTING_EDGE := $(shell . ${SCRIPTS_DIR}/lib/version; echo $$CUTTING_EDGE)
 DEV_VERSION := $(shell . ${SCRIPTS_DIR}/lib/version; echo $$DEV_VERSION)
 
-export VERSION DEV_VERSION
+export VERSION DEV_VERSION CUTTING_EDGE
 
 CROSS_TARGETS := linux-amd64 linux-arm64 windows-amd64.exe darwin-amd64
 BINARIES := bin/subctl
