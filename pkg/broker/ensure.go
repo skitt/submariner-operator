@@ -34,7 +34,7 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-func Ensure(config *rest.Config) error {
+func Ensure(config *rest.Config, crds bool) error {
 	crdCreator, err := crdutils.NewFromRestConfig(config)
 	if err != nil {
 		return fmt.Errorf("error accessing the target cluster: %s", err)

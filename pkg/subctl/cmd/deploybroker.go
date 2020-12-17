@@ -24,9 +24,12 @@ import (
 
 	"github.com/submariner-io/submariner-operator/pkg/discovery/globalnet"
 
+	submarinerv1a1 "github.com/submariner-io/submariner-operator/apis/submariner/v1alpha1"
 	"github.com/submariner-io/submariner-operator/pkg/broker"
 	"github.com/submariner-io/submariner-operator/pkg/internal/cli"
 	"github.com/submariner-io/submariner-operator/pkg/subctl/datafile"
+	"github.com/submariner-io/submariner-operator/pkg/subctl/operator/brokercr"
+	"github.com/submariner-io/submariner-operator/pkg/subctl/operator/submarinerop"
 )
 
 var (
@@ -75,9 +78,26 @@ var deployBroker = &cobra.Command{
 		exitOnError("The provided kubeconfig is invalid", err)
 
 		status := cli.NewStatus()
-		status.Start("Deploying broker")
-		err = broker.Ensure(config)
+
+		status.Start("Setting up broker RBAC")
+		err = broker.Ensure(config, false)
 		status.End(cli.CheckForError(err))
+		exitOnError("Error setting up broker RBAC", err)
+
+		status.Start("Deploying the Submariner operator")
+		err = submarinerop.Ensure(status, config, OperatorNamespace, operatorImage())
+		status.End(cli.CheckForError(err))
+		exitOnError("Error deploying the operator", err)
+
+		status.Start("Deploying the broker")
+		err = brokercr.Ensure(config, OperatorNamespace, populateBrokerSpec())
+		if err == nil {
+			status.QueueSuccessMessage("The broker has been deployed")
+			status.End(cli.Success)
+		} else {
+			status.QueueFailureMessage("Broker deployment failed")
+			status.End(cli.Failure)
+		}
 		exitOnError("Error deploying the broker", err)
 
 		status.Start(fmt.Sprintf("Creating %s file", brokerDetailsFilename))
@@ -131,4 +151,15 @@ func isValidGlobalnetConfig() (bool, error) {
 		return false, err
 	}
 	return true, err
+}
+
+func populateBrokerSpec() submarinerv1a1.BrokerSpec {
+	brokerSpec := submarinerv1a1.BrokerSpec{
+		GlobalnetEnabled:            globalnetEnable,
+		GlobalnetCidrRange:          globalnetCidrRange,
+		DefaultGlobalnetClusterSize: defaultGlobalnetClusterSize,
+		ServiceDiscovery:            serviceDiscovery,
+		DefaultCustomDomains:        defaultCustomDomains,
+	}
+	return brokerSpec
 }

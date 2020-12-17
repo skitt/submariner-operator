@@ -32,6 +32,11 @@ func Ensure(restConfig *rest.Config) (bool, error) {
 		return false, err
 	}
 
+	brokerCrd, err := getBrokerCRD()
+	if err != nil {
+		return false, err
+	}
+
 	submarinerCrd, err := getSubmarinerCRD()
 	if err != nil {
 		return false, err
@@ -40,13 +45,28 @@ func Ensure(restConfig *rest.Config) (bool, error) {
 	// Attempt to update or create the CRD definition
 	// TODO(majopela): In the future we may want to report when we have updated the existing
 	//                 CRD definition with new versions
-	return utils.CreateOrUpdateCRD(crdUpdater, submarinerCrd)
+	submarinerCreated, err := utils.CreateOrUpdateCRD(crdUpdater, submarinerCrd)
+	if err != nil {
+		return false, err
+	}
+	brokerCreated, err := utils.CreateOrUpdateCRD(crdUpdater, brokerCrd)
+	return submarinerCreated || brokerCreated, err
 }
 
 func getSubmarinerCRD() (*apiextensions.CustomResourceDefinition, error) {
 	crd := &apiextensions.CustomResourceDefinition{}
 
 	if err := embeddedyamls.GetObject(embeddedyamls.Deploy_crds_submariner_io_submariners_yaml, crd); err != nil {
+		return nil, err
+	}
+
+	return crd, nil
+}
+
+func getBrokerCRD() (*apiextensions.CustomResourceDefinition, error) {
+	crd := &apiextensions.CustomResourceDefinition{}
+
+	if err := embeddedyamls.GetObject(embeddedyamls.Deploy_crds_submariner_io_brokers_yaml, crd); err != nil {
 		return nil, err
 	}
 
