@@ -24,6 +24,8 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=create
+
 // Ensure functions updates or installs the operator CRDs in the cluster
 func Ensure(restConfig *rest.Config, namespace string) (bool, error) {
 	clientSet, err := clientset.NewForConfig(restConfig)

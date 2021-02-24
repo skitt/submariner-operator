@@ -42,10 +42,9 @@ type BrokerReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// TODO skitt: these rbac declarations (and others, see submariner_controller.go) need to be separated
-// from methods in order to be taken into account; but they produce ClusterRoles, not the Roles we want
 // +kubebuilder:rbac:groups=submariner.io,resources=brokers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=submariner.io,resources=brokers/status,verbs=get;update;patch
+
 func (r *BrokerReconciler) Reconcile(request ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()
 	_ = r.Log.WithValues("broker", request.NamespacedName)

@@ -150,7 +150,7 @@ generate: vendor/modules.txt
 
 # Generate manifests e.g. CRD, RBAC etc
 manifests: generate vendor/modules.txt
-	controller-gen $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	controller-gen $(CRD_OPTIONS) rbac:roleName=submariner-operator webhook paths="./..." output:crd:artifacts:config=config/crd/bases output:rbac:artifacts:config=config/rbac/submariner-operator
 
 # test if VERSION matches the semantic versioning rule
 is-semantic-version:

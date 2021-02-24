@@ -3,8 +3,6 @@ resources:
   - submariner-operator/service_account.yaml
   - submariner-operator/role.yaml
   - submariner-operator/role_binding.yaml
-  - submariner-operator/cluster_role.yaml
-  - submariner-operator/cluster_role_binding.yaml
   - submariner-gateway/service_account.yaml
   - submariner-gateway/role.yaml
   - submariner-gateway/role_binding.yaml

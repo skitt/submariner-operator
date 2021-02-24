@@ -37,8 +37,6 @@ var files = []string{
 	"config/rbac/submariner-operator/service_account.yaml",
 	"config/rbac/submariner-operator/role.yaml",
 	"config/rbac/submariner-operator/role_binding.yaml",
-	"config/rbac/submariner-operator/cluster_role.yaml",
-	"config/rbac/submariner-operator/cluster_role_binding.yaml",
 	"config/rbac/submariner-gateway/service_account.yaml",
 	"config/rbac/submariner-gateway/role.yaml",
 	"config/rbac/submariner-gateway/role_binding.yaml",

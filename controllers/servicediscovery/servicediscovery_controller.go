@@ -103,6 +103,7 @@ type ServiceDiscoveryReconciler struct {
 
 // +kubebuilder:rbac:groups=submariner.io,resources=servicediscoveries,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=submariner.io,resources=servicediscoveries/status,verbs=get;update;patch
+
 func (r *ServiceDiscoveryReconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling ServiceDiscovery")
@@ -377,6 +378,9 @@ func newLighthouseCoreDNSService(cr *submarinerv1alpha1.ServiceDiscovery) *corev
 	}
 }
 
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;update
+// +kubebuilder:rbac:groups="",resources=services,verbs=get
+
 func updateDNSCustomConfigMap(client controllerClient.Client, k8sclientSet clientset.Interface, cr *submarinerv1alpha1.ServiceDiscovery,
 	reqLogger logr.Logger) error {
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -414,6 +418,9 @@ func updateDNSCustomConfigMap(client controllerClient.Client, k8sclientSet clien
 	})
 	return retryErr
 }
+
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;update
+// +kubebuilder:rbac:groups="",resources=services,verbs=get
 
 func updateDNSConfigMap(client controllerClient.Client, k8sclientSet clientset.Interface, cr *submarinerv1alpha1.ServiceDiscovery,
 	reqLogger logr.Logger) error {
@@ -555,6 +562,10 @@ func getImagePath(submariner *submarinerv1alpha1.ServiceDiscovery, componentImag
 	return images.GetImagePath(submariner.Spec.Repository, submariner.Spec.Version, componentImage,
 		submariner.Spec.ImageOverrides)
 }
+
+// Resources need to be listable as well as watchable (for the informer)
+// +kubebuilder:rbac:groups=submariner.io,resources=servicediscoveries,verbs=list;watch
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=list;watch
 
 func (r *ServiceDiscoveryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// These are required so that we can manipulate DNS ConfigMap

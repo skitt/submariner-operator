@@ -105,6 +105,7 @@ type SubmarinerReconciler struct {
 
 // +kubebuilder:rbac:groups=submariner.io,resources=submariners,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=submariner.io,resources=submariners/status,verbs=get;update;patch
+
 func (r *SubmarinerReconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Submariner")
@@ -277,6 +278,8 @@ func (r *SubmarinerReconciler) checkDaemonSetContainers(daemonSet *appsv1.Daemon
 	return mismatchedContainerImages, &nonReadyContainerStates, nil
 }
 
+// +kubebuilder:rbac:groups="",resources=pods,verbs=list
+
 func (r *SubmarinerReconciler) retrieveDaemonSetContainerStatuses(daemonSet *appsv1.DaemonSet,
 	namespace string) (*[]corev1.ContainerStatus, error) {
 	pods := &corev1.PodList{}
@@ -294,6 +297,8 @@ func (r *SubmarinerReconciler) retrieveDaemonSetContainerStatuses(daemonSet *app
 	}
 	return &containerStatuses, nil
 }
+
+// +kubebuilder:rbac:groups=submariner.io,resources=gateways,verbs=list
 
 func (r *SubmarinerReconciler) retrieveGateways(owner metav1.Object, namespace string) (*[]submv1.Gateway, error) {
 	foundGateways := &submv1.GatewayList{}
@@ -701,6 +706,10 @@ func getImagePath(submariner *submopv1a1.Submariner, componentImage string) stri
 	return images.GetImagePath(submariner.Spec.Repository, submariner.Spec.Version, componentImage,
 		submariner.Spec.ImageOverrides)
 }
+
+// Resources need to be listable as well as watchable (for the informer)
+// +kubebuilder:rbac:groups=submariner.io,resources=gateways;submariners,verbs=list;watch
+// +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=list;watch
 
 func (r *SubmarinerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Set up the CRDs we need

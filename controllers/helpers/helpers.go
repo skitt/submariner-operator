@@ -34,6 +34,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+// +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=create;delete;get;update
+
 func ReconcileDaemonSet(owner metav1.Object, daemonSet *appsv1.DaemonSet, reqLogger logr.Logger,
 	client controllerClient.Client, scheme *runtime.Scheme) (*appsv1.DaemonSet, error) {
 	var err error
@@ -94,6 +96,8 @@ func ReconcileDaemonSet(owner metav1.Object, daemonSet *appsv1.DaemonSet, reqLog
 	return daemonSet, errorutil.WithMessagef(err, "error creating or updating DaemonSet %s/%s", daemonSet.Namespace, daemonSet.Name)
 }
 
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=create;get;update
+
 func ReconcileDeployment(owner metav1.Object, deployment *appsv1.Deployment, reqLogger logr.Logger,
 	client controllerClient.Client, scheme *runtime.Scheme) (*appsv1.Deployment, error) {
 	var err error
@@ -140,6 +144,8 @@ func ReconcileDeployment(owner metav1.Object, deployment *appsv1.Deployment, req
 	return deployment, errorutil.WithMessagef(err, "error creating or updating Deployment %s/%s", deployment.Namespace, deployment.Name)
 }
 
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=create;get;update
+
 func ReconcileConfigMap(owner metav1.Object, configMap *corev1.ConfigMap, reqLogger logr.Logger,
 	client controllerClient.Client, scheme *runtime.Scheme) (*corev1.ConfigMap, error) {
 	var err error
@@ -185,6 +191,8 @@ func ReconcileConfigMap(owner metav1.Object, configMap *corev1.ConfigMap, reqLog
 
 	return configMap, errorutil.WithMessagef(err, "error creating or updating ConfigMap %s/%s", configMap.Namespace, configMap.Name)
 }
+
+// +kubebuilder:rbac:groups="",resources=services,verbs=create;get;update
 
 func ReconcileService(owner metav1.Object, service *corev1.Service, reqLogger logr.Logger,
 	client controllerClient.Client, scheme *runtime.Scheme) (*corev1.Service, error) {

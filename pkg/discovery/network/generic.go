@@ -76,6 +76,8 @@ func findClusterIPRangeFromApiserver(clientSet kubernetes.Interface) (string, er
 	return findPodCommandParameter(clientSet, "component=kube-apiserver", "--service-cluster-ip-range")
 }
 
+// +kubebuilder:rbac:groups="",resources=services,verbs=create
+
 func findClusterIPRangeFromServiceCreation(clientSet kubernetes.Interface) (string, error) {
 	// find service cidr based on https://stackoverflow.com/questions/44190607/how-do-you-find-the-cluster-service-cidr-of-a-kubernetes-cluster
 	invalidSvcSpec := &v1.Service{
@@ -159,6 +161,8 @@ func findPodIPRangeKubeController(clientSet kubernetes.Interface) (string, error
 func findPodIPRangeKubeProxy(clientSet kubernetes.Interface) (string, error) {
 	return findPodCommandParameter(clientSet, "component=kube-proxy", "--cluster-cidr")
 }
+
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=list
 
 func findPodIPRangeFromNodeSpec(clientSet kubernetes.Interface) (string, error) {
 	nodes, err := clientSet.CoreV1().Nodes().List(v1meta.ListOptions{})

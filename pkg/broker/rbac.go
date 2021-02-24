@@ -129,6 +129,9 @@ func NewBrokerRoleBinding(serviceAccount, role string) *rbacv1.RoleBinding {
 	return binding
 }
 
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get
+
 func GetClientTokenSecret(clientSet clientset.Interface, brokerNamespace, submarinerBrokerSA string) (*v1.Secret, error) {
 	sa, err := clientSet.CoreV1().ServiceAccounts(brokerNamespace).Get(submarinerBrokerSA, metav1.GetOptions{})
 	if err != nil {

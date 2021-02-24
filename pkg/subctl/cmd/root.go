@@ -129,6 +129,8 @@ func getClientConfig(kubeConfigPath, kubeContext string) clientcmd.ClientConfig 
 	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, overrides)
 }
 
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=list
+
 func handleNodeLabels(config *rest.Config) error {
 	_, clientset, err := getClients(config)
 	exitOnError("Unable to set the Kubernetes cluster connection up", err)
@@ -159,6 +161,8 @@ func handleNodeLabels(config *rest.Config) error {
 	}
 	return nil
 }
+
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=list
 
 func askForGatewayNode(clientset kubernetes.Interface) (struct{ Node string }, error) {
 	// List all nodes and select one
@@ -193,6 +197,8 @@ func askForGatewayNode(clientset kubernetes.Interface) (struct{ Node string }, e
 	}
 	return answers, nil
 }
+
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=patch
 
 // this function was sourced from:
 // https://github.com/kubernetes/kubernetes/blob/a3ccea9d8743f2ff82e41b6c2af6dc2c41dc7b10/test/utils/density_utils.go#L36
