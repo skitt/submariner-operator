@@ -43,6 +43,7 @@ import (
 	"github.com/submariner-io/submariner-operator/pkg/internal/cli"
 	"github.com/submariner-io/submariner-operator/pkg/names"
 	"github.com/submariner-io/submariner-operator/pkg/subctl/datafile"
+	"github.com/submariner-io/submariner-operator/pkg/subctl/operator/servicediscoverycr"
 	"github.com/submariner-io/submariner-operator/pkg/subctl/operator/submarinercr"
 	"github.com/submariner-io/submariner-operator/pkg/subctl/operator/submarinerop"
 	"github.com/submariner-io/submariner-operator/pkg/versions"
@@ -60,6 +61,7 @@ var (
 	colorCodes                    string
 	natTraversal                  bool
 	disableNat                    bool
+	globalnetEnabled              bool
 	ipsecDebug                    bool
 	submarinerDebug               bool
 	labelGateway                  bool
@@ -126,6 +128,8 @@ func addJoinFlags(cmd *cobra.Command) {
 		"interval in seconds between health check packets")
 	cmd.Flags().Uint64Var(&healthCheckMaxPacketLossCount, "health-check-max-packet-loss-count", 5,
 		"maximum number of packets lost before the connection is marked as down")
+	cmd.Flags().BoolVar(&globalnetEnabled, "globalnet", true,
+		"enable/disable Globalnet for this cluster")
 }
 
 const (
@@ -229,7 +233,7 @@ func joinSubmarinerCluster(config clientcmd.ClientConfig, contextName string, su
 	}
 	exitOnError("Unable to check requirements", err)
 
-	if labelGateway && !noLabel {
+	if subctlData.IsConnectivityEnabled() && labelGateway && !noLabel {
 		err := handleNodeLabels(clientConfig)
 		exitOnError("Unable to set the gateway node up", err)
 	}
@@ -258,8 +262,10 @@ func joinSubmarinerCluster(config clientcmd.ClientConfig, contextName string, su
 		ClusterCIDRAutoDetected: clusterCIDRautoDetected,
 		GlobalnetClusterSize:    globalnetClusterSize}
 
-	err = AllocateAndUpdateGlobalCIDRConfigMap(brokerAdminClientset, brokerNamespace, &netconfig)
-	exitOnError("Error Discovering multi cluster details", err)
+	if globalnetEnabled {
+		err = AllocateAndUpdateGlobalCIDRConfigMap(brokerAdminClientset, brokerNamespace, &netconfig)
+		exitOnError("Error Discovering multi cluster details", err)
+	}
 
 	status.Start("Deploying the Submariner operator")
 
@@ -272,16 +278,30 @@ func joinSubmarinerCluster(config clientcmd.ClientConfig, contextName string, su
 	status.End(cli.CheckForError(err))
 	exitOnError("Error creating SA for cluster", err)
 
-	status.Start("Deploying Submariner")
-	err = submarinercr.Ensure(clientConfig, OperatorNamespace, populateSubmarinerSpec(subctlData, netconfig))
-	if err == nil {
-		status.QueueSuccessMessage("Submariner is up and running")
-		status.End(cli.Success)
-	} else {
-		status.QueueFailureMessage("Submariner deployment failed")
-		status.End(cli.Failure)
+	if subctlData.IsConnectivityEnabled() {
+		status.Start("Deploying Submariner")
+		err = submarinercr.Ensure(clientConfig, OperatorNamespace, populateSubmarinerSpec(subctlData, netconfig))
+		if err == nil {
+			status.QueueSuccessMessage("Submariner is up and running")
+			status.End(cli.Success)
+		} else {
+			status.QueueFailureMessage("Submariner deployment failed")
+			status.End(cli.Failure)
+		}
+
+		exitOnError("Error deploying Submariner", err)
+	} else if subctlData.IsServiceDiscoveryEnabled() {
+		status.Start("Deploying service discovery only")
+		err = servicediscoverycr.Ensure(clientConfig, OperatorNamespace, populateServiceDiscoverySpec(subctlData))
+		if err == nil {
+			status.QueueSuccessMessage("Service discovery is up and running")
+			status.End(cli.Success)
+		} else {
+			status.QueueFailureMessage("Service discovery deployment failed")
+			status.End(cli.Failure)
+		}
+		exitOnError("Error deploying service discovery", err)
 	}
-	exitOnError("Error deploying Submariner", err)
 }
 
 func checkRequirements(config *rest.Config) ([]string, error) {
@@ -338,7 +358,7 @@ func AllocateAndUpdateGlobalCIDRConfigMap(brokerAdminClientset *kubernetes.Clien
 			if globalnetInfo.GlobalCidrInfo[clusterID] == nil ||
 				globalnetInfo.GlobalCidrInfo[clusterID].GlobalCIDRs[0] != netconfig.GlobalnetCIDR {
 				var newClusterInfo broker.ClusterInfo
-				newClusterInfo.ClusterId = clusterID
+				newClusterInfo.ClusterID = clusterID
 				newClusterInfo.GlobalCidr = []string{netconfig.GlobalnetCIDR}
 
 				err = broker.UpdateGlobalnetConfigMap(brokerAdminClientset, brokerNamespace, globalnetConfigMap, newClusterInfo)
@@ -418,9 +438,9 @@ func askForCIDR(name string) (string, error) {
 func isValidClusterID(clusterID string) (bool, error) {
 	// Make sure the clusterid is a valid DNS-1123 string
 	if match, _ := regexp.MatchString("^[a-z0-9][a-z0-9.-]*[a-z0-9]$", clusterID); !match {
-		return false, fmt.Errorf("Cluster IDs must be valid DNS-1123 names, with only lowercase alphanumerics,\n"+
+		return false, fmt.Errorf("cluster IDs must be valid DNS-1123 names, with only lowercase alphanumerics,\n"+
 			"'.' or '-' (and the first and last characters must be alphanumerics).\n"+
-			"%s doesn't meet these requirements\n", clusterID)
+			"%s doesn't meet these requirements", clusterID)
 	}
 	return true, nil
 }
@@ -449,8 +469,8 @@ func populateSubmarinerSpec(subctlData *datafile.SubctlData, netconfig globalnet
 	}
 
 	submarinerSpec := submariner.SubmarinerSpec{
-		Repository:               repository,
-		Version:                  imageVersion,
+		Repository:               getImageRepo(),
+		Version:                  getImageVersion(),
 		CeIPSecNATTPort:          nattPort,
 		CeIPSecIKEPort:           ikePort,
 		CeIPSecDebug:             ipsecDebug,
@@ -468,7 +488,7 @@ func populateSubmarinerSpec(subctlData *datafile.SubctlData, netconfig globalnet
 		ClusterCIDR:              crClusterCIDR,
 		Namespace:                SubmarinerNamespace,
 		CableDriver:              cableDriver,
-		ServiceDiscoveryEnabled:  subctlData.ServiceDiscovery,
+		ServiceDiscoveryEnabled:  subctlData.IsServiceDiscoveryEnabled(),
 		ImageOverrides:           getImageOverrides(),
 		ConnectionHealthCheck: &submariner.HealthCheckSpec{
 			Enabled:            healthCheckEnable,
@@ -483,6 +503,71 @@ func populateSubmarinerSpec(subctlData *datafile.SubctlData, netconfig globalnet
 		submarinerSpec.CustomDomains = customDomains
 	}
 	return submarinerSpec
+}
+
+func getImageVersion() string {
+	imageOverrides := getImageOverrides()
+	version := imageVersion
+
+	if imageVersion == "" {
+		version = versions.DefaultSubmarinerOperatorVersion
+	}
+
+	if override, ok := imageOverrides[names.OperatorImage]; ok {
+		version, _ = images.ParseOperatorImage(override)
+	}
+
+	return version
+}
+
+func getImageRepo() string {
+	imageOverrides := getImageOverrides()
+	repo := repository
+
+	if repository == "" {
+		repo = versions.DefaultRepo
+	}
+
+	if override, ok := imageOverrides[names.OperatorImage]; ok {
+		_, repo = images.ParseOperatorImage(override)
+	}
+
+	return repo
+}
+
+func removeSchemaPrefix(brokerURL string) string {
+	if idx := strings.Index(brokerURL, "://"); idx >= 0 {
+		// Submariner doesn't work with a schema prefix
+		brokerURL = brokerURL[(idx + 3):]
+	}
+
+	return brokerURL
+}
+
+func populateServiceDiscoverySpec(subctlData *datafile.SubctlData) *submariner.ServiceDiscoverySpec {
+	brokerURL := removeSchemaPrefix(subctlData.BrokerURL)
+
+	if customDomains == nil && subctlData.CustomDomains != nil {
+		customDomains = *subctlData.CustomDomains
+	}
+
+	serviceDiscoverySpec := submariner.ServiceDiscoverySpec{
+		Repository:               repository,
+		Version:                  imageVersion,
+		BrokerK8sCA:              base64.StdEncoding.EncodeToString(subctlData.ClientToken.Data["ca.crt"]),
+		BrokerK8sRemoteNamespace: string(subctlData.ClientToken.Data["namespace"]),
+		BrokerK8sApiServerToken:  string(clienttoken.Data["token"]),
+		BrokerK8sApiServer:       brokerURL,
+		Debug:                    submarinerDebug,
+		ClusterID:                clusterID,
+		Namespace:                SubmarinerNamespace,
+		ImageOverrides:           getImageOverrides(),
+	}
+
+	if len(customDomains) > 0 {
+		serviceDiscoverySpec.CustomDomains = customDomains
+	}
+	return &serviceDiscoverySpec
 }
 
 func operatorImage() string {

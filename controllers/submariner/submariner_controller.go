@@ -18,12 +18,10 @@ package submariner
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"strconv"
 
 	"github.com/go-logr/logr"
-	"github.com/operator-framework/operator-sdk/pkg/metrics"
 	errorutil "github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -49,15 +47,18 @@ import (
 
 	submopv1a1 "github.com/submariner-io/submariner-operator/apis/submariner/v1alpha1"
 	"github.com/submariner-io/submariner-operator/controllers/helpers"
+	"github.com/submariner-io/submariner-operator/controllers/metrics"
 	submarinerclientset "github.com/submariner-io/submariner-operator/pkg/client/clientset/versioned"
 	"github.com/submariner-io/submariner-operator/pkg/discovery/network"
+	"github.com/submariner-io/submariner-operator/pkg/gateway"
 	"github.com/submariner-io/submariner-operator/pkg/images"
 	"github.com/submariner-io/submariner-operator/pkg/names"
+	crdutils "github.com/submariner-io/submariner-operator/pkg/utils/crds"
 	submv1 "github.com/submariner-io/submariner/pkg/apis/submariner.io/v1"
 )
 
 const (
-	engineMetricsServerPort    = 8080
+	gatewayMetricsServerPort   = 8080
 	globalnetMetricsServerPort = 8081
 )
 
@@ -122,22 +123,19 @@ func (r *SubmarinerReconciler) Reconcile(request reconcile.Request) (reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	initialStatus := instance.Status.DeepCopy()
-
-	instance.SetDefaults()
-
-	if err := r.client.Update(context.TODO(), instance); err != nil {
-		return reconcile.Result{}, err
+	if instance.ObjectMeta.DeletionTimestamp != nil {
+		// Graceful deletion has been requested, ignore the object
+		return reconcile.Result{}, nil
 	}
 
-	// discovery is performed after Update to avoid storing the discovery in the
-	// struct beyond status
+	initialStatus := instance.Status.DeepCopy()
+
 	clusterNetwork, err := r.discoverNetwork(instance)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	engineDaemonSet, err := r.reconcileEngineDaemonSet(instance, reqLogger)
+	gatewayDaemonSet, err := r.reconcileGatewayDaemonSet(instance, reqLogger)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -158,6 +156,10 @@ func (r *SubmarinerReconciler) Reconcile(request reconcile.Request) (reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	if err := r.serviceDiscoveryReconciler(instance, reqLogger, instance.Spec.ServiceDiscoveryEnabled); err != nil {
+		return reconcile.Result{}, err
+	}
+
 	// Retrieve the gateway information
 	gateways, err := r.retrieveGateways(instance, request.Namespace)
 	if err != nil {
@@ -165,7 +167,46 @@ func (r *SubmarinerReconciler) Reconcile(request reconcile.Request) (reconcile.R
 		log.Error(err, "error retrieving gateways")
 	}
 
+	gatewayStatuses := buildGatewayStatusAndUpdateMetrics(gateways)
+
+	instance.Status.NatEnabled = instance.Spec.NatEnabled
+	instance.Status.ColorCodes = instance.Spec.ColorCodes
+	instance.Status.ClusterID = instance.Spec.ClusterID
+	instance.Status.GlobalCIDR = instance.Spec.GlobalCIDR
+	instance.Status.Gateways = &gatewayStatuses
+
+	err = r.updateDaemonSetStatus(gatewayDaemonSet, &instance.Status.GatewayDaemonSetStatus, request.Namespace)
+	if err != nil {
+		reqLogger.Error(err, "failed to check gateway daemonset containers")
+		return reconcile.Result{}, err
+	}
+	err = r.updateDaemonSetStatus(routeagentDaemonSet, &instance.Status.RouteAgentDaemonSetStatus, request.Namespace)
+	if err != nil {
+		reqLogger.Error(err, "failed to check route agent daemonset containers")
+		return reconcile.Result{}, err
+	}
+	err = r.updateDaemonSetStatus(globalnetDaemonSet, &instance.Status.GlobalnetDaemonSetStatus, request.Namespace)
+	if err != nil {
+		reqLogger.Error(err, "failed to check gateway daemonset containers")
+		return reconcile.Result{}, err
+	}
+	if !reflect.DeepEqual(instance.Status, initialStatus) {
+		err := r.client.Status().Update(context.TODO(), instance)
+		if err != nil {
+			reqLogger.Error(err, "failed to update the Submariner status")
+			// Log the error, but indicate success, to avoid reconciliation storms
+			// TODO skitt determine what we should really be doing for concurrent updates to the Submariner CR
+			// Updates fail here because the instance is updated between the .Update() at the start of the function
+			// and the status update here
+		}
+	}
+
+	return reconcile.Result{}, nil
+}
+
+func buildGatewayStatusAndUpdateMetrics(gateways *[]submv1.Gateway) []submv1.GatewayStatus {
 	var gatewayStatuses = []submv1.GatewayStatus{}
+
 	if gateways != nil {
 		recordGateways(len(*gateways))
 		// Clear the connections so we don’t remember stale status information
@@ -187,39 +228,7 @@ func (r *SubmarinerReconciler) Reconcile(request reconcile.Request) (reconcile.R
 		recordNoConnections()
 	}
 
-	instance.Status.NatEnabled = instance.Spec.NatEnabled
-	instance.Status.ColorCodes = instance.Spec.ColorCodes
-	instance.Status.ClusterID = instance.Spec.ClusterID
-	instance.Status.GlobalCIDR = instance.Spec.GlobalCIDR
-	instance.Status.Gateways = &gatewayStatuses
-
-	err = r.updateDaemonSetStatus(engineDaemonSet, &instance.Status.EngineDaemonSetStatus, request.Namespace)
-	if err != nil {
-		reqLogger.Error(err, "failed to check engine daemonset containers")
-		return reconcile.Result{}, err
-	}
-	err = r.updateDaemonSetStatus(routeagentDaemonSet, &instance.Status.RouteAgentDaemonSetStatus, request.Namespace)
-	if err != nil {
-		reqLogger.Error(err, "failed to check route agent daemonset containers")
-		return reconcile.Result{}, err
-	}
-	err = r.updateDaemonSetStatus(globalnetDaemonSet, &instance.Status.GlobalnetDaemonSetStatus, request.Namespace)
-	if err != nil {
-		reqLogger.Error(err, "failed to check engine daemonset containers")
-		return reconcile.Result{}, err
-	}
-	if !reflect.DeepEqual(instance.Status, initialStatus) {
-		err := r.client.Status().Update(context.TODO(), instance)
-		if err != nil {
-			reqLogger.Error(err, "failed to update the Submariner status")
-			return reconcile.Result{}, err
-		}
-	}
-
-	if err := r.serviceDiscoveryReconciler(instance, reqLogger, instance.Spec.ServiceDiscoveryEnabled); err != nil {
-		return reconcile.Result{}, err
-	}
-	return reconcile.Result{}, nil
+	return gatewayStatuses
 }
 
 func (r *SubmarinerReconciler) updateDaemonSetStatus(daemonSet *appsv1.DaemonSet, status *submopv1a1.DaemonSetStatus,
@@ -304,12 +313,13 @@ func (r *SubmarinerReconciler) retrieveGateways(owner metav1.Object, namespace s
 	return &foundGateways.Items, nil
 }
 
-func (r *SubmarinerReconciler) reconcileEngineDaemonSet(instance *submopv1a1.Submariner, reqLogger logr.Logger) (*appsv1.DaemonSet, error) {
-	daemonSet, err := helpers.ReconcileDaemonSet(instance, newEngineDaemonSet(instance), reqLogger, r.client, r.scheme)
+func (r *SubmarinerReconciler) reconcileGatewayDaemonSet(
+	instance *submopv1a1.Submariner, reqLogger logr.Logger) (*appsv1.DaemonSet, error) {
+	daemonSet, err := helpers.ReconcileDaemonSet(instance, newGatewayDaemonSet(instance), reqLogger, r.client, r.scheme)
 	if err != nil {
 		return nil, err
 	}
-	err = r.setupMetrics(instance, daemonSet.GetLabels(), reqLogger, engineMetricsServerPort)
+	err = metrics.Setup(instance.Namespace, instance, daemonSet.GetLabels(), gatewayMetricsServerPort, r.client, r.config, r.scheme, reqLogger)
 	return daemonSet, err
 }
 
@@ -334,7 +344,8 @@ func (r *SubmarinerReconciler) reconcileGlobalnetDaemonSet(instance *submopv1a1.
 	if err != nil {
 		return nil, err
 	}
-	err = r.setupMetrics(instance, daemonSet.GetLabels(), reqLogger, globalnetMetricsServerPort)
+	err = metrics.Setup(instance.Namespace, instance, daemonSet.GetLabels(), globalnetMetricsServerPort,
+		r.client, r.config, r.scheme, reqLogger)
 	return daemonSet, err
 }
 
@@ -386,39 +397,10 @@ func (r *SubmarinerReconciler) serviceDiscoveryReconciler(submariner *submopv1a1
 	return errorutil.WithMessagef(err, "error reconciling the Service Discovery CR")
 }
 
-func (r *SubmarinerReconciler) setupMetrics(instance *submopv1a1.Submariner, labels map[string]string,
-	reqLogger logr.Logger, port int32) error {
-	app, ok := labels["app"]
-	if !ok {
-		return fmt.Errorf("No app label in the provided labels, %v", labels)
-	}
-	metricsService, err := helpers.ReconcileService(instance, newMetricsService(instance, app, port), reqLogger, r.client, r.scheme)
-	if err != nil {
-		return err
-	}
-
-	if r.config != nil {
-		services := []*corev1.Service{metricsService}
-		_, err = metrics.CreateServiceMonitors(r.config, instance.Namespace, services)
-		if err != nil {
-			log.Info("Could not create ServiceMonitor object", "error", err.Error())
-			// If this operator is deployed to a cluster without the prometheus-operator running, it will return
-			// ErrServiceMonitorNotPresent, which can be used to safely skip ServiceMonitor creation.
-			if err == metrics.ErrServiceMonitorNotPresent {
-				log.Info("Install prometheus-operator in your cluster to create ServiceMonitor objects", "error", err.Error())
-			} else if !errors.IsAlreadyExists(err) {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-func newEngineDaemonSet(cr *submopv1a1.Submariner) *appsv1.DaemonSet {
+func newGatewayDaemonSet(cr *submopv1a1.Submariner) *appsv1.DaemonSet {
 	labels := map[string]string{
-		"app":       "submariner-engine",
-		"component": "engine",
+		"app":       "submariner-gateway",
+		"component": "gateway",
 	}
 
 	revisionHistoryLimit := int32(5)
@@ -432,8 +414,8 @@ func newEngineDaemonSet(cr *submopv1a1.Submariner) *appsv1.DaemonSet {
 			Name:      "submariner-gateway",
 		},
 		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "submariner-engine"}},
-			Template: newEnginePodTemplate(cr),
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "submariner-gateway"}},
+			Template: newGatewayPodTemplate(cr),
 			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 				RollingUpdate: &appsv1.RollingUpdateDaemonSet{
 					MaxUnavailable: &maxUnavailable,
@@ -447,50 +429,20 @@ func newEngineDaemonSet(cr *submopv1a1.Submariner) *appsv1.DaemonSet {
 	return deployment
 }
 
-// newMetricsService populates a Service providing access to metrics for the given application
-// The assumptions are:
-// - the application's resources are labeled with "app=" the given app name
-// - the metrics are exposed on port 8080 on "/metrics"
-// The Service is named after the application name, suffixed with "-metrics"
-func newMetricsService(cr *submopv1a1.Submariner, app string, port int32) *corev1.Service {
+// newGatewayPodTemplate returns a submariner pod with the same fields as the cr
+func newGatewayPodTemplate(cr *submopv1a1.Submariner) corev1.PodTemplateSpec {
 	labels := map[string]string{
-		"app": app,
+		"app": "submariner-gateway",
 	}
 
-	servicePorts := []corev1.ServicePort{
-		{Port: port, Name: "metrics", Protocol: corev1.ProtocolTCP, TargetPort: intstr.IntOrString{Type: intstr.Int,
-			IntVal: port}},
-	}
-
-	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Labels:    labels,
-			Namespace: cr.Namespace,
-			Name:      fmt.Sprintf("%s-metrics", app),
-		},
-		Spec: corev1.ServiceSpec{
-			Ports:    servicePorts,
-			Selector: labels,
-		},
-	}
-
-	return service
-}
-
-// newEnginePodTemplate returns a submariner pod with the same fields as the cr
-func newEnginePodTemplate(cr *submopv1a1.Submariner) corev1.PodTemplateSpec {
-	labels := map[string]string{
-		"app": "submariner-engine",
-	}
-
-	// Create privileged security context for Engine pod
+	// Create privileged security context for Gateway pod
 	// FIXME: Seems like these have to be a var, so can pass pointer to bool var to SecurityContext. Cleaner option?
 	allowPrivilegeEscalation := true
 	privileged := true
 	runAsNonRoot := false
 	readOnlyRootFilesystem := false
 
-	security_context_all_caps_privileged := corev1.SecurityContext{
+	securityContextAllCapsPrivileged := corev1.SecurityContext{
 		Capabilities:             &corev1.Capabilities{Add: []corev1.Capability{"ALL"}},
 		AllowPrivilegeEscalation: &allowPrivilegeEscalation,
 		Privileged:               &privileged,
@@ -530,14 +482,11 @@ func newEnginePodTemplate(cr *submopv1a1.Submariner) corev1.PodTemplateSpec {
 			NodeSelector: map[string]string{"submariner.io/gateway": "true"},
 			Containers: []corev1.Container{
 				{
-					Name:            "submariner",
-					Image:           getImagePath(cr, names.EngineImage),
-					ImagePullPolicy: helpers.GetPullPolicy(cr.Spec.Version, cr.Spec.ImageOverrides[names.EngineImage]),
+					Name:            "submariner-gateway",
+					Image:           getImagePath(cr, names.GatewayImage),
+					ImagePullPolicy: helpers.GetPullPolicy(cr.Spec.Version, cr.Spec.ImageOverrides[names.GatewayImage]),
 					Command:         []string{"submariner.sh"},
-					SecurityContext: &security_context_all_caps_privileged,
-					VolumeMounts: []corev1.VolumeMount{
-						{Name: "host-slash", MountPath: "/host", ReadOnly: true},
-					},
+					SecurityContext: &securityContextAllCapsPrivileged,
 					Env: []corev1.EnvVar{
 						{Name: "SUBMARINER_NAMESPACE", Value: cr.Spec.Namespace},
 						{Name: "SUBMARINER_CLUSTERCIDR", Value: cr.Status.ClusterCIDR},
@@ -566,15 +515,12 @@ func newEnginePodTemplate(cr *submopv1a1.Submariner) corev1.PodTemplateSpec {
 					},
 				},
 			},
-			// TODO: Use SA submariner-engine or submariner?
-			ServiceAccountName:            "submariner-operator",
+			// TODO: Use SA submariner-gateway or submariner?
+			ServiceAccountName:            "submariner-gateway",
 			HostNetwork:                   true,
 			TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
 			RestartPolicy:                 corev1.RestartPolicyAlways,
 			DNSPolicy:                     corev1.DNSClusterFirst,
-			Volumes: []corev1.Volume{
-				{Name: "host-slash", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/"}}},
-			},
 			// The gateway engine must be able to run on any flagged node, regardless of existing taints
 			Tolerations: []corev1.Toleration{{Operator: corev1.TolerationOpExists}},
 		},
@@ -606,7 +552,7 @@ func newRouteAgentDaemonSet(cr *submopv1a1.Submariner) *appsv1.DaemonSet {
 	privileged := true
 	readOnlyFileSystem := false
 	runAsNonRoot := false
-	security_context_all_cap_allow_escal := corev1.SecurityContext{
+	securityContextAllCapAllowEscal := corev1.SecurityContext{
 		Capabilities:             &corev1.Capabilities{Add: []corev1.Capability{"ALL"}},
 		AllowPrivilegeEscalation: &allowPrivilegeEscalation,
 		Privileged:               &privileged,
@@ -644,7 +590,7 @@ func newRouteAgentDaemonSet(cr *submopv1a1.Submariner) *appsv1.DaemonSet {
 							ImagePullPolicy: helpers.GetPullPolicy(cr.Spec.Version, cr.Spec.ImageOverrides[names.RouteAgentImage]),
 							// FIXME: Should be entrypoint script, find/use correct file for routeagent
 							Command:         []string{"submariner-route-agent.sh"},
-							SecurityContext: &security_context_all_cap_allow_escal,
+							SecurityContext: &securityContextAllCapAllowEscal,
 							VolumeMounts: []corev1.VolumeMount{
 								{Name: "host-slash", MountPath: "/host", ReadOnly: true},
 							},
@@ -664,8 +610,7 @@ func newRouteAgentDaemonSet(cr *submopv1a1.Submariner) *appsv1.DaemonSet {
 							},
 						},
 					},
-					// TODO: Use SA submariner-routeagent or submariner?
-					ServiceAccountName: "submariner-operator",
+					ServiceAccountName: "submariner-routeagent",
 					HostNetwork:        true,
 					Volumes: []corev1.Volume{
 						{Name: "host-slash", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/"}}},
@@ -694,7 +639,7 @@ func newGlobalnetDaemonSet(cr *submopv1a1.Submariner) *appsv1.DaemonSet {
 	privileged := true
 	readOnlyFileSystem := false
 	runAsNonRoot := false
-	security_context_all_cap_allow_escal := corev1.SecurityContext{
+	securityContextAllCapAllowEscal := corev1.SecurityContext{
 		Capabilities:             &corev1.Capabilities{Add: []corev1.Capability{"ALL"}},
 		AllowPrivilegeEscalation: &allowPrivilegeEscalation,
 		Privileged:               &privileged,
@@ -722,7 +667,7 @@ func newGlobalnetDaemonSet(cr *submopv1a1.Submariner) *appsv1.DaemonSet {
 							Name:            "submariner-globalnet",
 							Image:           getImagePath(cr, names.GlobalnetImage),
 							ImagePullPolicy: helpers.GetPullPolicy(cr.Spec.Version, cr.Spec.ImageOverrides[names.GlobalnetImage]),
-							SecurityContext: &security_context_all_cap_allow_escal,
+							SecurityContext: &securityContextAllCapAllowEscal,
 							VolumeMounts: []corev1.VolumeMount{
 								{Name: "host-slash", MountPath: "/host", ReadOnly: true},
 							},
@@ -738,8 +683,7 @@ func newGlobalnetDaemonSet(cr *submopv1a1.Submariner) *appsv1.DaemonSet {
 							},
 						},
 					},
-					// TODO: Use SA submariner-globalnet or submariner?
-					ServiceAccountName:            "submariner-operator",
+					ServiceAccountName:            "submariner-globalnet",
 					TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
 					NodeSelector:                  map[string]string{"submariner.io/gateway": "true"},
 					HostNetwork:                   true,
@@ -771,6 +715,15 @@ func getImagePath(submariner *submopv1a1.Submariner, componentImage string) stri
 }
 
 func (r *SubmarinerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Set up the CRDs we need
+	crdUpdater, err := crdutils.NewFromRestConfig(mgr.GetConfig())
+	if err != nil {
+		return err
+	}
+	if err := gateway.Ensure(crdUpdater); err != nil {
+		return err
+	}
+
 	// These are required so that we can retrieve Gateway objects using the dynamic client
 	if err := submv1.AddToScheme(mgr.GetScheme()); err != nil {
 		return err

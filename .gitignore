@@ -3,12 +3,13 @@ bin/
 build/_output/
 dist/
 deploy/crds
-deploy/lighthouse/crds/lighthouse.submariner.io_*.yaml
 deploy/submariner/crds
 config/bundle/kustomization.yaml
+package/.image.*
 output/
 vendor/
 *.coverprofile
 .idea
 .shflags
 junit.xml
+Makefile.dapper

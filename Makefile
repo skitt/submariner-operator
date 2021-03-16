@@ -1,20 +1,26 @@
+BASE_BRANCH ?= devel
+export BASE_BRANCH
+
 ifneq (,$(DAPPER_HOST_ARCH))
 
 # Running in Dapper
 
+IMAGES=submariner-operator
+PRELOAD_IMAGES := $(IMAGES) submariner-gateway submariner-route-agent lighthouse-agent lighthouse-coredns
+
 include $(SHIPYARD_DIR)/Makefile.inc
-
-override CALCULATED_VERSION := $(shell . ${SCRIPTS_DIR}/lib/version; echo $$VERSION)
-VERSION ?= $(CALCULATED_VERSION)
-DEV_VERSION := $(shell . ${SCRIPTS_DIR}/lib/version; echo $$DEV_VERSION)
-
-export VERSION DEV_VERSION
 
 CROSS_TARGETS := linux-amd64 linux-arm64 linux-arm windows-amd64.exe darwin-amd64
 BINARIES := bin/subctl
 CROSS_BINARIES := $(foreach cross,$(CROSS_TARGETS),$(patsubst %,bin/subctl-$(VERSION)-%,$(cross)))
 CROSS_TARBALLS := $(foreach cross,$(CROSS_TARGETS),$(patsubst %,dist/subctl-$(VERSION)-%.tar.xz,$(cross)))
+
+ifneq (,$(filter ovn,$(_using)))
+CLUSTER_SETTINGS_FLAG = --cluster_settings $(DAPPER_SOURCE)/scripts/kind-e2e/cluster_settings.ovn
+else
 CLUSTER_SETTINGS_FLAG = --cluster_settings $(DAPPER_SOURCE)/scripts/kind-e2e/cluster_settings
+endif
+
 override CLUSTERS_ARGS += $(CLUSTER_SETTINGS_FLAG)
 override DEPLOY_ARGS += $(CLUSTER_SETTINGS_FLAG)
 export DEPLOY_ARGS
@@ -31,7 +37,7 @@ GOARCH = $(shell go env GOARCH)
 GOEXE = $(shell go env GOEXE)
 GOOS = $(shell go env GOOS)
 
-# Options for 'bundle-build'
+# Options for 'submariner-operator-bundle' image
 ifneq ($(origin CHANNELS), undefined)
 BUNDLE_CHANNELS := --channels=$(CHANNELS)
 endif
@@ -68,9 +74,7 @@ endif
 
 # Targets to make
 
-clusters: build images
-
-deploy: clusters preload-images
+images: build
 
 e2e: deploy
 	scripts/kind-e2e/e2e.sh
@@ -82,10 +86,7 @@ build: $(BINARIES)
 
 build-cross: $(CROSS_TARBALLS)
 
-operator-image: bin/submariner-operator
-	$(SCRIPTS_DIR)/build_image.sh -i submariner-operator -f Dockerfile
-
-images: operator-image bundle-build
+package/Dockerfile.submariner-operator: bin/submariner-operator
 
 bin/submariner-operator: vendor/modules.txt main.go generate-embeddedyamls
 	${SCRIPTS_DIR}/compile.sh \
@@ -110,14 +111,15 @@ bin/subctl-%: generate-embeddedyamls $(shell find pkg/subctl/ -name "*.go") vend
 	GOARCH=$${components[-1]}; \
 	export GOARCH GOOS; \
 	$(SCRIPTS_DIR)/compile.sh \
-		--ldflags "-X github.com/submariner-io/submariner-operator/pkg/version.Version=$(CALCULATED_VERSION)" \
+		--ldflags "-X github.com/submariner-io/submariner-operator/pkg/version.Version=$(CALCULATED_VERSION) \
+			   -X=github.com/submariner-io/submariner-operator/pkg/versions.DefaultSubmarinerOperatorVersion=$(if eq($(patsubst subctl-devel-%,devel,$(CALCULATED_VERSION)),devel),devel,$(CALCULATED_VERSION))" \
 		--noupx $@ ./pkg/subctl/main.go
 
 ci: generate-embeddedyamls golangci-lint markdownlint unit build images
 
 generate-embeddedyamls: generate pkg/subctl/operator/common/embeddedyamls/yamls.go
 
-pkg/subctl/operator/common/embeddedyamls/yamls.go: pkg/subctl/operator/common/embeddedyamls/generators/yamls2go.go deploy/crds/submariner.io_servicediscoveries.yaml deploy/crds/submariner.io_submariners.yaml deploy/lighthouse/crds/lighthouse.submariner.io_serviceexports.yaml deploy/lighthouse/crds/lighthouse.submariner.io_serviceimports.yaml deploy/submariner/crds/submariner.io_clusters.yaml deploy/submariner/crds/submariner.io_endpoints.yaml deploy/submariner/crds/submariner.io_gateways.yaml $(shell find deploy/ -name "*.yaml") $(shell find config/rbac/ -name "*.yaml") vendor/modules.txt
+pkg/subctl/operator/common/embeddedyamls/yamls.go: pkg/subctl/operator/common/embeddedyamls/generators/yamls2go.go deploy/crds/submariner.io_servicediscoveries.yaml deploy/crds/submariner.io_submariners.yaml deploy/submariner/crds/submariner.io_clusters.yaml deploy/submariner/crds/submariner.io_endpoints.yaml deploy/submariner/crds/submariner.io_gateways.yaml $(shell find deploy/ -name "*.yaml") $(shell find config/rbac/ -name "*.yaml") vendor/modules.txt
 	go generate pkg/subctl/operator/common/embeddedyamls/generate.go
 
 # Operator CRDs
@@ -127,17 +129,13 @@ deploy/crds/submariner.io_servicediscoveries.yaml: ./apis/submariner/v1alpha1/se
 deploy/crds/submariner.io_submariners.yaml: ./apis/submariner/v1alpha1/submariner_types.go vendor/modules.txt
 	controller-gen $(CRD_OPTIONS) paths="./..." output:crd:artifacts:config=deploy/crds
 
-# Lighthouse CRDs
-deploy/lighthouse/crds/lighthouse.submariner.io_serviceexports.yaml deploy/lighthouse/crds/lighthouse.submariner.io_serviceimports.yaml: vendor/modules.txt
-	cd vendor/github.com/submariner-io/lighthouse && controller-gen $(CRD_OPTIONS) paths="./..." output:crd:artifacts:config=../../../../deploy/lighthouse/crds
-
 # Submariner CRDs
 deploy/submariner/crds/submariner.io_clusters.yaml deploy/submariner/crds/submariner.io_endpoints.yaml deploy/submariner/crds/submariner.io_gateways.yaml: vendor/modules.txt
 	cd vendor/github.com/submariner-io/submariner && controller-gen $(CRD_OPTIONS) paths="./..." output:crd:artifacts:config=../../../../deploy/submariner/crds
 
 # Generate the clientset for the Submariner APIs
 # It needs to be run when the Submariner APIs change
-generate-clientset:
+generate-clientset: vendor/modules.txt
 	git clone https://github.com/kubernetes/code-generator -b kubernetes-1.17.0 $${GOPATH}/src/k8s.io/code-generator
 	cd $${GOPATH}/src/k8s.io/code-generator && go mod vendor
 	GO111MODULE=on $${GOPATH}/src/k8s.io/code-generator/generate-groups.sh \
@@ -153,15 +151,6 @@ generate: vendor/modules.txt
 # Generate manifests e.g. CRD, RBAC etc
 manifests: generate vendor/modules.txt
 	controller-gen $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
-
-preload-images:
-	source $(SCRIPTS_DIR)/lib/debug_functions; \
-	source $(SCRIPTS_DIR)/lib/deploy_funcs; \
-	source $(SCRIPTS_DIR)/lib/version; \
-	set -e; \
-	for image in submariner submariner-route-agent submariner-operator lighthouse-agent submariner-globalnet lighthouse-coredns; do \
-		import_image quay.io/submariner/$${image}; \
-	done
 
 # test if VERSION matches the semantic versioning rule
 is-semantic-version:
@@ -186,10 +175,6 @@ bundle: kustomization
 	kustomize build config/bundle/ --load_restrictor=LoadRestrictionsNone --output bundle/manifests/submariner.clusterserviceversion.yaml && \
 	operator-sdk bundle validate ./bundle
 
-# Build the bundle image
-bundle-build:
-	$(SCRIPTS_DIR)/build_image.sh -i submariner-operator-bundle -f bundle.Dockerfile
-
 # Generate package manifests
 packagemanifests: kustomization
 	(kustomize build config/manifests \
@@ -202,15 +187,21 @@ golangci-lint: generate-embeddedyamls
 
 unit: generate-embeddedyamls
 
-.PHONY: build images ci clean generate-clientset generate-embeddedyamls operator-image preload-images bundle bundle-build packagemanifests kustomization is-semantic-version
+.PHONY: build ci clean generate-clientset generate-embeddedyamls bundle packagemanifests kustomization is-semantic-version
 
 else
 
 # Not running in Dapper
 
+Makefile.dapper:
+	@echo Downloading $@
+	@curl -sfLO https://raw.githubusercontent.com/submariner-io/shipyard/$(BASE_BRANCH)/$@
+
 include Makefile.dapper
+
+.PHONY: deploy
 
 endif
 
 # Disable rebuilding Makefile
-Makefile Makefile.dapper Makefile.inc: ;
+Makefile Makefile.inc: ;

@@ -24,12 +24,16 @@ import (
 	"io/ioutil"
 	"net/url"
 
+	"github.com/submariner-io/admiral/pkg/stringset"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
 	"github.com/submariner-io/submariner-operator/pkg/broker"
+	"github.com/submariner-io/submariner-operator/pkg/subctl/components"
+
 	submarinerClientset "github.com/submariner-io/submariner/pkg/client/clientset/versioned"
 )
 
@@ -38,12 +42,29 @@ type SubctlData struct {
 	ClientToken      *v1.Secret `omitempty,json:"clientToken"`
 	IPSecPSK         *v1.Secret `omitempty,json:"ipsecPSK"`
 	ServiceDiscovery bool       `omitempty,json:"serviceDiscovery"`
+	Components       []string   `json:",omitempty"`
 	CustomDomains    *[]string  `omitempty,json:"customDomains"`
 	// Todo (revisit): The following values are moved from the broker-info.subm file to configMap
 	// on the Broker. This needs to be revisited to support seamless upgrades.
 	// https://github.com/submariner-io/submariner-operator/issues/504
 	// GlobalnetCidrRange   string `omitempty,json:"globalnetCidrRange"`
 	// GlobalnetClusterSize uint   `omitempty,json:"globalnetClusterSize"`
+}
+
+func (data *SubctlData) SetComponents(componentSet stringset.Interface) {
+	data.Components = componentSet.Elements()
+}
+
+func (data *SubctlData) GetComponents() stringset.Interface {
+	return stringset.New(data.Components...)
+}
+
+func (data *SubctlData) IsConnectivityEnabled() bool {
+	return data.GetComponents().Contains(components.Connectivity)
+}
+
+func (data *SubctlData) IsServiceDiscoveryEnabled() bool {
+	return data.GetComponents().Contains(components.ServiceDiscovery) || data.ServiceDiscovery
 }
 
 func (data *SubctlData) ToString() (string, error) {
@@ -109,7 +130,7 @@ func newFromCluster(clientSet clientset.Interface, brokerNamespace, ipsecSubmFil
 	if ipsecSubmFile != "" {
 		datafile, err := NewFromFile(ipsecSubmFile)
 		if err != nil {
-			return nil, fmt.Errorf("Error happened trying to import IPsec PSK from subm file: %s: %s", ipsecSubmFile,
+			return nil, fmt.Errorf("error happened trying to import IPsec PSK from subm file: %s: %s", ipsecSubmFile,
 				err.Error())
 		}
 		subctlData.IPSecPSK = datafile.IPSecPSK
@@ -140,8 +161,13 @@ func (data *SubctlData) getAndCheckBrokerAdministratorConfig(private bool) (*res
 	if err != nil {
 		return config, err
 	}
-	// The point of the broker client is to access Submariner data, we know we should able to list clusters
+	// This attempts to determine whether we can connect, by trying to access a Submariner object
+	// Successful connections result in either the object, or a “not found” error; anything else
+	// likely means we couldn’t connect
 	_, err = submClientset.SubmarinerV1().Clusters(string(data.ClientToken.Data["namespace"])).List(metav1.ListOptions{})
+	if errors.IsNotFound(err) {
+		err = nil
+	}
 	return config, err
 }
 

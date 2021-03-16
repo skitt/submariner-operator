@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -32,6 +31,8 @@ var showCmd = &cobra.Command{
 	Long:  `This command shows information about some aspect of the submariner deployment in a cluster.`,
 }
 
+const submMissingMessage = "Submariner is not installed"
+
 type restConfig struct {
 	config      *rest.Config
 	clusterName string
@@ -40,42 +41,6 @@ type restConfig struct {
 func init() {
 	addKubeconfigFlag(showCmd)
 	rootCmd.AddCommand(showCmd)
-}
-
-func getMultipleRestConfigs(kubeConfigPath, kubeContext string) ([]restConfig, error) {
-	var restConfigs []restConfig
-
-	rules := clientcmd.NewDefaultClientConfigLoadingRules()
-	rules.DefaultClientConfig = &clientcmd.DefaultClientConfig
-	overrides := &clientcmd.ConfigOverrides{ClusterDefaults: clientcmd.ClusterDefaults}
-	rules.ExplicitPath = kubeConfigPath
-
-	if kubeContext != "" {
-		overrides.CurrentContext = kubeContext
-	}
-
-	if kubeConfigPath != "" || kubeContext != "" {
-		config, err := getClientConfigAndClusterName(rules, overrides)
-		if err != nil {
-			return nil, err
-		}
-		restConfigs = append(restConfigs, config)
-		return restConfigs, nil
-	}
-
-	for _, item := range rules.Precedence {
-		if item != "" {
-			rules.ExplicitPath = item
-			config, err := getClientConfigAndClusterName(rules, overrides)
-			if err != nil {
-				return nil, err
-			}
-
-			restConfigs = append(restConfigs, config)
-		}
-	}
-
-	return restConfigs, nil
 }
 
 func getClientConfigAndClusterName(rules *clientcmd.ClientConfigLoadingRules, overrides *clientcmd.ConfigOverrides) (restConfig, error) {
@@ -93,7 +58,7 @@ func getClientConfigAndClusterName(rules *clientcmd.ClientConfigLoadingRules, ov
 	clusterName := getClusterNameFromContext(raw, overrides.CurrentContext)
 
 	if clusterName == nil {
-		return restConfig{}, fmt.Errorf("Could not obtain the cluster name from kube config: %#v", raw)
+		return restConfig{}, fmt.Errorf("could not obtain the cluster name from kube config: %#v", raw)
 	}
 
 	return restConfig{config: clientConfig, clusterName: *clusterName}, nil

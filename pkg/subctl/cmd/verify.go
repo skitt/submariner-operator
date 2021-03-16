@@ -34,6 +34,7 @@ import (
 	"github.com/submariner-io/shipyard/test/e2e"
 	"github.com/submariner-io/shipyard/test/e2e/framework"
 	submarinerclientset "github.com/submariner-io/submariner-operator/pkg/client/clientset/versioned"
+	"github.com/submariner-io/submariner-operator/pkg/subctl/components"
 	"github.com/submariner-io/submariner-operator/pkg/subctl/operator/submarinercr"
 	_ "github.com/submariner-io/submariner/test/e2e/dataplane"
 	_ "github.com/submariner-io/submariner/test/e2e/redundancy"
@@ -122,7 +123,7 @@ prompt for confirmation therefore you must specify --enable-disruptive to run th
 			return
 		}
 
-		config.GinkgoConfig.FocusString = strings.Join(patterns, "|")
+		config.GinkgoConfig.FocusStrings = patterns
 
 		fmt.Printf("Performing the following verifications: %s\n", strings.Join(verifications, ", "))
 
@@ -180,17 +181,17 @@ func clusterNameFromConfig(kubeConfigPath, kubeContext string) string {
 
 func checkValidateArguments(args []string) error {
 	if len(args) != 2 {
-		return fmt.Errorf("Two kubeconfigs must be specified.")
+		return fmt.Errorf("two kubeconfigs must be specified")
 	}
 	if strings.Compare(args[0], args[1]) == 0 {
-		return fmt.Errorf("Kubeconfig file <kubeConfig1> and <kubeConfig2> cannot be the same file.")
+		return fmt.Errorf("kubeconfig file <kubeConfig1> and <kubeConfig2> cannot be the same file")
 	}
 	same, err := compareFiles(args[0], args[1])
 	if err != nil {
 		return err
 	}
 	if same {
-		return fmt.Errorf("Kubeconfig file <kubeConfig1> and <kubeConfig2> need to have a unique content.")
+		return fmt.Errorf("kubeconfig file <kubeConfig1> and <kubeConfig2> need to have a unique content")
 	}
 	if connectionAttempts < 1 {
 		return fmt.Errorf("--connection-attempts must be >=1")
@@ -222,8 +223,8 @@ func checkVerifyArguments() error {
 }
 
 var verifyE2EPatterns = map[string]string{
-	"connectivity":      "\\[dataplane",
-	"service-discovery": "\\[discovery",
+	components.Connectivity:     "\\[dataplane",
+	components.ServiceDiscovery: "\\[discovery",
 }
 
 var verifyE2EDisruptivePatterns = map[string]string{
@@ -239,7 +240,7 @@ const (
 )
 
 func disruptiveVerificationNames() []string {
-	var names []string
+	var names = make([]string, 0, len(verifyE2EDisruptivePatterns))
 	for n := range verifyE2EDisruptivePatterns {
 		names = append(names, n)
 	}
@@ -291,7 +292,7 @@ func getVerifyPatterns(csv string, includeDisruptive bool) ([]string, []string, 
 		vtype, pattern := getVerifyPattern(verification)
 		switch vtype {
 		case unknownVerification:
-			return nil, nil, fmt.Errorf("Unknown verification %q", verification)
+			return nil, nil, fmt.Errorf("unknown verification %q", verification)
 		case normalVerification:
 			outputPatterns = append(outputPatterns, pattern)
 			outputVerifications = append(outputVerifications, verification)
@@ -304,7 +305,7 @@ func getVerifyPatterns(csv string, includeDisruptive bool) ([]string, []string, 
 	}
 
 	if len(outputPatterns) == 0 {
-		return nil, nil, fmt.Errorf("Please specify at least one verification to be performed")
+		return nil, nil, fmt.Errorf("please specify at least one verification to be performed")
 	}
 	return outputPatterns, outputVerifications, nil
 }
