@@ -33,6 +33,9 @@ const (
 	OvnKubernetes      = "OVNKubernetes"
 )
 
+// +kubebuilder:rbac:groups="",resources=services,verbs=get
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get
+
 func discoverOvnKubernetesNetwork(clientSet kubernetes.Interface) (*ClusterNetwork, error) {
 	ovnDBPod, err := findPod(clientSet, "name=ovnkube-db")
 

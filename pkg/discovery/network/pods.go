@@ -49,6 +49,8 @@ func findPodCommandParameter(clientSet kubernetes.Interface, labelSelector, para
 	return "", nil
 }
 
+// +kubebuilder:rbac:groups="",resources=pods,verbs=list
+
 func findPod(clientSet kubernetes.Interface, labelSelector string) (*v1.Pod, error) {
 	pods, err := clientSet.CoreV1().Pods("").List(v1meta.ListOptions{
 		LabelSelector: labelSelector,

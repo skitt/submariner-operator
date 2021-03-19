@@ -177,6 +177,8 @@ func WaitForClientToken(clientset *kubernetes.Clientset, submarinerBrokerSA stri
 	return secret, err
 }
 
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=create
+
 func CreateNewBrokerNamespace(clientset *kubernetes.Clientset) (brokernamespace *v1.Namespace, err error) {
 	return clientset.CoreV1().Namespaces().Create(NewBrokerNamespace())
 }
@@ -189,12 +191,16 @@ func CreateOrUpdateBrokerAdminRole(clientset *kubernetes.Clientset) (created boo
 	return utils.CreateOrUpdateRole(clientset, SubmarinerBrokerNamespace, NewBrokerAdminRole())
 }
 
+// +kubebuilder:rbac:groups=rbac,resources=rolebindings,verbs=create
+
 func CreateNewBrokerRoleBinding(clientset *kubernetes.Clientset, serviceAccount, role string) (brokerRoleBinding *rbac.RoleBinding,
 	err error) {
 	return clientset.RbacV1().RoleBindings(SubmarinerBrokerNamespace).Create(
 		NewBrokerRoleBinding(serviceAccount, role),
 	)
 }
+
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=create
 
 func CreateNewBrokerSA(clientset *kubernetes.Clientset, submarinerBrokerSA string) (brokerSA *v1.ServiceAccount, err error) {
 	return clientset.CoreV1().ServiceAccounts(SubmarinerBrokerNamespace).Create(NewBrokerSA(submarinerBrokerSA))

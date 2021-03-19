@@ -32,6 +32,8 @@ import (
 	crdutils "github.com/submariner-io/submariner-operator/pkg/utils/crds"
 )
 
+// +kubebuilder:rbac:groups=rbac,resources=clusterroles,verbs=create;get;update
+
 func CreateOrUpdateClusterRole(clientSet clientset.Interface, clusterRole *rbacv1.ClusterRole) (bool, error) {
 	_, err := clientSet.RbacV1().ClusterRoles().Create(clusterRole)
 	if err == nil {
@@ -52,6 +54,8 @@ func CreateOrUpdateClusterRole(clientSet clientset.Interface, clusterRole *rbacv
 	return false, err
 }
 
+// +kubebuilder:rbac:groups=rbac,resources=clusterrolebindings,verbs=create;get;update
+
 func CreateOrUpdateClusterRoleBinding(clientSet clientset.Interface, clusterRoleBinding *rbacv1.ClusterRoleBinding) (bool, error) {
 	_, err := clientSet.RbacV1().ClusterRoleBindings().Create(clusterRoleBinding)
 	if err == nil {
@@ -71,6 +75,8 @@ func CreateOrUpdateClusterRoleBinding(clientSet clientset.Interface, clusterRole
 	}
 	return false, err
 }
+
+// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=create;get;update
 
 func CreateOrUpdateCRD(updater crdutils.CRDUpdater, crd *apiextensions.CustomResourceDefinition) (bool, error) {
 	_, err := updater.Create(crd)
@@ -102,6 +108,8 @@ func CreateOrUpdateEmbeddedCRD(updater crdutils.CRDUpdater, crdYaml string) (boo
 	return CreateOrUpdateCRD(updater, crd)
 }
 
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=create;get;update
+
 func CreateOrUpdateDeployment(clientSet clientset.Interface, namespace string, deployment *appsv1.Deployment) (bool, error) {
 	_, err := clientSet.AppsV1().Deployments(namespace).Create(deployment)
 	if err != nil && errors.IsAlreadyExists(err) {
@@ -119,6 +127,8 @@ func CreateOrUpdateDeployment(clientSet clientset.Interface, namespace string, d
 	}
 	return true, err
 }
+
+// +kubebuilder:rbac:groups=rbac,resources=roles,verbs=create;get;update
 
 func CreateOrUpdateRole(clientSet clientset.Interface, namespace string, role *rbacv1.Role) (bool, error) {
 	_, err := clientSet.RbacV1().Roles(namespace).Create(role)
@@ -138,6 +148,8 @@ func CreateOrUpdateRole(clientSet clientset.Interface, namespace string, role *r
 	return true, err
 }
 
+// +kubebuilder:rbac:groups=rbac,resources=rolebindings,verbs=create;get;update
+
 func CreateOrUpdateRoleBinding(clientSet clientset.Interface, namespace string, roleBinding *rbacv1.RoleBinding) (bool, error) {
 	_, err := clientSet.RbacV1().RoleBindings(namespace).Create(roleBinding)
 	if err != nil && errors.IsAlreadyExists(err) {
@@ -155,6 +167,8 @@ func CreateOrUpdateRoleBinding(clientSet clientset.Interface, namespace string, 
 	}
 	return true, err
 }
+
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=create;get;update
 
 func CreateOrUpdateServiceAccount(clientSet clientset.Interface, namespace string, sa *corev1.ServiceAccount) (bool, error) {
 	_, err := clientSet.CoreV1().ServiceAccounts(namespace).Create(sa)

@@ -39,6 +39,8 @@ type ClusterInfo struct {
 	GlobalCidr []string `json:"global_cidr"`
 }
 
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=create
+
 func CreateGlobalnetConfigMap(config *rest.Config, globalnetEnabled bool, defaultGlobalCidrRange string,
 	defaultGlobalClusterSize uint, namespace string) error {
 	clientset, err := kubernetes.NewForConfig(config)
@@ -95,6 +97,8 @@ func NewGlobalnetConfigMap(globalnetEnabled bool, defaultGlobalCidrRange string,
 	return cm, nil
 }
 
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=update
+
 func UpdateGlobalnetConfigMap(k8sClientset *kubernetes.Clientset, namespace string,
 	configMap *v1.ConfigMap, newCluster ClusterInfo) error {
 	var clusterInfo []ClusterInfo
@@ -127,6 +131,8 @@ func UpdateGlobalnetConfigMap(k8sClientset *kubernetes.Clientset, namespace stri
 	_, err = k8sClientset.CoreV1().ConfigMaps(namespace).Update(configMap)
 	return err
 }
+
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get
 
 func GetGlobalnetConfigMap(k8sClientset *kubernetes.Clientset, namespace string) (*v1.ConfigMap, error) {
 	cm, err := k8sClientset.CoreV1().ConfigMaps(namespace).Get(GlobalCIDRConfigMapName, metav1.GetOptions{})

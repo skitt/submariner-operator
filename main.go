@@ -87,6 +87,9 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
+// The metrics setup requires access to replicasets
+// +kubebuilder:rbac:groups=apps,resources=replicasets,verbs=get
+
 func main() {
 	// Add the zap logger flag set to the CLI. The flag set must
 	// be added before calling pflag.Parse().
