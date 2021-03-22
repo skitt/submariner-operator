@@ -2,20 +2,3 @@
   # You may pin to the exact commit or the version.
   # uses: z0al/dependent-issues@7d0ca031ceb9607ee8a65063f869e4bb6fa124c2
   uses: z0al/dependent-issues@v1.1.2
-  with:
-    # The label to use to mark dependent issues
-    label: # optional, default is dependent
-    # Enable checking for dependencies in issues
-    check_issues: # optional
-    # A comma-separated list of keywords
-    keywords: # optional, default is depends on, blocked by- name: Dependent Issues
-  # You may pin to the exact commit or the version.
-  # uses: z0al/dependent-issues@7d0ca031ceb9607ee8a65063f869e4bb6fa124c2
-  uses: z0al/dependent-issues@v1.1.2
-  with:
-    # The label to use to mark dependent issues
-    label: # optional, default is dependent
-    # Enable checking for dependencies in issues
-    check_issues: # optional
-    # A comma-separated list of keywords
-    keywords: # optional, default is depends on, blocked by
