@@ -20,7 +20,7 @@ require (
 	github.com/spf13/cobra v1.1.1
 	github.com/submariner-io/admiral v0.9.0-m2
 	github.com/submariner-io/lighthouse v0.9.0-m2
-	github.com/submariner-io/shipyard v0.9.0-m2
+	github.com/submariner-io/shipyard v0.9.0-m2.0.20210407134933-9aea81a2ffe3
 	github.com/submariner-io/submariner v0.9.0-m2
 	k8s.io/api v0.20.2
 	k8s.io/apiextensions-apiserver v0.20.1

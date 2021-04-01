@@ -33,7 +33,7 @@ func init() {
 
 var verifyConnectivityCmd = &cobra.Command{
 	Deprecated: "Use verify --connectivity",
-	Use:        "verify-connectivity <kubeConfig1> <kubeConfig2>",
+	Use:        "verify-connectivity <kubeContext1> <kubeContext2>",
 	Short:      "Verify connectivity between two clusters",
 	Args: func(cmd *cobra.Command, args []string) error {
 		return checkValidateArguments(args)

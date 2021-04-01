@@ -17,10 +17,8 @@ limitations under the License.
 package cmd
 
 import (
-	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"syscall"
@@ -76,7 +74,7 @@ func addVerifyFlags(cmd *cobra.Command) {
 }
 
 var verifyCmd = &cobra.Command{
-	Use:   "verify <kubeConfig1> <kubeConfig2>",
+	Use:   "verify <kubeContext1> <kubeContext1>",
 	Short: "Run verifications between two clusters",
 	Long: `This command performs various tests to verify that a Submariner deployment between two clusters
 is functioning properly. The verifications performed are controlled by the --only and --enable-disruptive
@@ -150,19 +148,30 @@ func isNonInteractive(err error) bool {
 }
 
 func configureTestingFramework(args []string) {
-	framework.TestContext.KubeConfig = ""
-	framework.TestContext.KubeConfigs = args
+	// Legacy handling: if the arguments are files, assume they are kubeconfigs;
+	// otherwise, assume they are contexts
+	_, err1 := os.Stat(args[0])
+	_, err2 := os.Stat(args[1])
+	if err1 == nil && err2 == nil {
+		// Both files exist and can be examined without error
+		framework.TestContext.KubeConfig = ""
+		framework.TestContext.KubeConfigs = args
+
+		// Read the cluster names from the given kubeconfigs
+		for _, config := range args {
+			framework.TestContext.ClusterIDs = append(framework.TestContext.ClusterIDs, clusterNameFromConfig(config, ""))
+		}
+	} else {
+		// Something happened (possibly IsNotExist, but we don’t care about specifics)
+		framework.TestContext.KubeContexts = args
+		// The framework uses cluster names as cluster ids by default
+	}
 	framework.TestContext.OperationTimeout = operationTimeout
 	framework.TestContext.ConnectionTimeout = connectionTimeout
 	framework.TestContext.ConnectionAttempts = connectionAttempts
 	framework.TestContext.ReportDir = reportDirectory
 	framework.TestContext.ReportPrefix = "subctl"
 	framework.TestContext.SubmarinerNamespace = submarinerNamespace
-
-	// Read the cluster names from the given kubeconfigs
-	for _, config := range args {
-		framework.TestContext.ClusterIDs = append(framework.TestContext.ClusterIDs, clusterNameFromConfig(config, ""))
-	}
 
 	config.DefaultReporterConfig.Verbose = verboseConnectivityVerification
 	config.DefaultReporterConfig.SlowSpecThreshold = 60
@@ -181,18 +190,12 @@ func clusterNameFromConfig(kubeConfigPath, kubeContext string) string {
 
 func checkValidateArguments(args []string) error {
 	if len(args) != 2 {
-		return fmt.Errorf("two kubeconfigs must be specified")
+		return fmt.Errorf("two kubecontexts must be specified")
 	}
 	if strings.Compare(args[0], args[1]) == 0 {
-		return fmt.Errorf("kubeconfig file <kubeConfig1> and <kubeConfig2> cannot be the same file")
+		return fmt.Errorf("the two kubecontexts must be different")
 	}
-	same, err := compareFiles(args[0], args[1])
-	if err != nil {
-		return err
-	}
-	if same {
-		return fmt.Errorf("kubeconfig file <kubeConfig1> and <kubeConfig2> need to have a unique content")
-	}
+
 	if connectionAttempts < 1 {
 		return fmt.Errorf("--connection-attempts must be >=1")
 	}
@@ -201,18 +204,6 @@ func checkValidateArguments(args []string) error {
 		return fmt.Errorf("--connection-timeout must be >=20")
 	}
 	return nil
-}
-
-func compareFiles(file1, file2 string) (bool, error) {
-	first, err := ioutil.ReadFile(file1)
-	if err != nil {
-		return false, err
-	}
-	second, err := ioutil.ReadFile(file2)
-	if err != nil {
-		return false, err
-	}
-	return bytes.Equal(first, second), nil
 }
 
 func checkVerifyArguments() error {
