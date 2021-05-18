@@ -24,13 +24,13 @@ import (
 	"github.com/submariner-io/cloud-prepare/pkg/k8s"
 	cloudutils "github.com/submariner-io/submariner-operator/pkg/subctl/cmd/cloud/utils"
 	"github.com/submariner-io/submariner-operator/pkg/subctl/cmd/utils"
-	"github.com/submariner-io/submariner-operator/pkg/subctl/cmd/utils/restconfig"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
-func RunOnK8sCluster(kubeConfig, kubeContext string,
+func RunOnK8sCluster(clientConfig *clientcmd.ClientConfig,
 	function func(gwDeployer api.GatewayDeployer, reporter api.Reporter) error) error {
-	k8sConfig, err := restconfig.ForCluster(kubeConfig, kubeContext)
+	k8sConfig, err := (*clientConfig).ClientConfig()
 	utils.ExitOnError("Failed to initialize a Kubernetes config", err)
 
 	clientSet, err := kubernetes.NewForConfig(k8sConfig)

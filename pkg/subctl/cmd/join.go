@@ -86,7 +86,7 @@ var (
 
 func init() {
 	addJoinFlags(joinCmd)
-	AddKubeContextFlag(joinCmd)
+	addKubeContextFlag(joinCmd)
 	rootCmd.AddCommand(joinCmd)
 }
 
@@ -156,8 +156,8 @@ var joinCmd = &cobra.Command{
 		utils.ExitOnError("Error connecting to broker cluster", err)
 		err = isValidCustomCoreDNSConfig()
 		utils.ExitOnError("Invalid Custom CoreDNS configuration", err)
-		config := restconfig.ClientConfig(kubeConfig, kubeContext)
-		joinSubmarinerCluster(config, kubeContext, subctlData)
+		config := getClientConfig()
+		joinSubmarinerCluster(config, subctlData)
 	},
 }
 
@@ -170,7 +170,7 @@ func checkArgumentPassed(args []string) error {
 
 var status = cli.NewStatus()
 
-func joinSubmarinerCluster(config clientcmd.ClientConfig, contextName string, subctlData *datafile.SubctlData) {
+func joinSubmarinerCluster(config clientcmd.ClientConfig, subctlData *datafile.SubctlData) {
 	// Missing information
 	var qs = []*survey.Question{}
 
@@ -178,7 +178,7 @@ func joinSubmarinerCluster(config clientcmd.ClientConfig, contextName string, su
 		rawConfig, err := config.RawConfig()
 		// This will be fatal later, no point in continuing
 		utils.ExitOnError("Error connecting to the target cluster", err)
-		clusterName := restconfig.ClusterNameFromContext(rawConfig, contextName)
+		clusterName := getClusterNameFromContext(rawConfig)
 		if clusterName != nil {
 			clusterID = *clusterName
 		}

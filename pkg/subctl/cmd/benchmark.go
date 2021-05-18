@@ -67,7 +67,7 @@ func init() {
 }
 
 func addBenchmarkFlags(cmd *cobra.Command) {
-	AddKubeContextMultiFlag(cmd, "comma-separated list of one or two kubeconfig contexts to use.")
+	AddKubeContextMultiFlag(cmd)
 	cmd.PersistentFlags().BoolVar(&intraCluster, "intra-cluster", false, "run the test within a single cluster")
 	cmd.PersistentFlags().BoolVar(&benchmark.Verbose, "verbose", false, "produce verbose logs during benchmark tests")
 }

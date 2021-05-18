@@ -35,12 +35,12 @@ import (
 	"github.com/submariner-io/cloud-prepare/pkg/ocp"
 	cloudutils "github.com/submariner-io/submariner-operator/pkg/subctl/cmd/cloud/utils"
 	"github.com/submariner-io/submariner-operator/pkg/subctl/cmd/utils"
-	"github.com/submariner-io/submariner-operator/pkg/subctl/cmd/utils/restconfig"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/dns/v1"
 	"google.golang.org/api/option"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 const (
@@ -77,7 +77,7 @@ func AddGCPFlags(command *cobra.Command) {
 
 // RunOnGCP runs the given function on GCP, supplying it with a cloud instance connected to GCP and a reporter that writes to CLI.
 // The functions makes sure that infraID and region are specified, and extracts the credentials from a secret in order to connect to GCP.
-func RunOnGCP(gwInstanceType, kubeConfig, kubeContext string, dedicatedGWNodes bool,
+func RunOnGCP(gwInstanceType string, clientConfig *clientcmd.ClientConfig, dedicatedGWNodes bool,
 	function func(cloud api.Cloud, gwDeployer api.GatewayDeployer, reporter api.Reporter) error) error {
 	if ocpMetadataFile != "" {
 		err := initializeFlagsFromOCPMetadata(ocpMetadataFile)
@@ -104,7 +104,7 @@ func RunOnGCP(gwInstanceType, kubeConfig, kubeContext string, dedicatedGWNodes b
 	gcpClient, err := gcpClientIface.NewClient(projectID, options)
 	utils.ExitOnError("Failed to initialize a GCP Client", err)
 
-	k8sConfig, err := restconfig.ForCluster(kubeConfig, kubeContext)
+	k8sConfig, err := (*clientConfig).ClientConfig()
 	utils.ExitOnError("Failed to initialize a Kubernetes config", err)
 
 	clientSet, err := kubernetes.NewForConfig(k8sConfig)

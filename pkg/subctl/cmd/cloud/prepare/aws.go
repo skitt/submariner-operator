@@ -62,7 +62,7 @@ func prepareAws(cmd *cobra.Command, args []string) {
 		input.InternalPorts = append(input.InternalPorts, gwPorts...)
 	}
 
-	err := aws.RunOnAWS(awsGWInstanceType, *kubeConfig, *kubeContext,
+	err := aws.RunOnAWS(awsGWInstanceType, clientConfig,
 		func(cloud api.Cloud, gwDeployer api.GatewayDeployer, reporter api.Reporter) error {
 			if gateways > 0 {
 				gwInput := api.GatewayDeployInput{

@@ -20,6 +20,7 @@ package prepare
 
 import (
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 var (
@@ -27,8 +28,7 @@ var (
 	natDiscoveryPort uint16
 	vxlanPort        uint16
 	metricsPort      uint16
-	kubeConfig       *string
-	kubeContext      *string
+	clientConfig     *clientcmd.ClientConfig
 )
 
 var (
@@ -41,9 +41,8 @@ var (
 const DefaultNumGateways = 1
 
 // NewCommand returns a new cobra.Command used to prepare a cloud infrastructure
-func NewCommand(origKubeConfig, origKubeContext *string) *cobra.Command {
-	kubeConfig = origKubeConfig
-	kubeContext = origKubeContext
+func NewCommand(origClientConfig *clientcmd.ClientConfig) *cobra.Command {
+	clientConfig = origClientConfig
 	cmd := &cobra.Command{
 		Use:   "prepare",
 		Short: "Prepare the cloud",

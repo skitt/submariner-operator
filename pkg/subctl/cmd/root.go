@@ -41,16 +41,18 @@ import (
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 var (
 	kubeConfig   string
-	kubeContext  string
 	kubeContexts []string
 	rootCmd      = &cobra.Command{
 		Use:   "subctl",
 		Short: "An installer for Submariner",
 	}
+	clientConfig clientcmd.ClientConfig
 )
 
 const SubmMissingMessage = "Submariner is not installed"
@@ -61,8 +63,8 @@ func Execute() error {
 
 func init() {
 	rootCmd.AddCommand(cmdversion.Cmd)
-	cloudCmd := cloud.NewCommand(&kubeConfig, &kubeContext)
-	AddKubeContextFlag(cloudCmd)
+	cloudCmd := cloud.NewCommand(&clientConfig)
+	addKubeContextFlag(cloudCmd)
 	rootCmd.AddCommand(cloudCmd)
 }
 
@@ -71,29 +73,56 @@ func AddToRootCommand(cmd *cobra.Command) {
 }
 
 func AddKubeConfigFlag(cmd *cobra.Command) {
-	cmd.PersistentFlags().StringVar(&kubeConfig, "kubeconfig", "", "absolute path(s) to the kubeconfig file(s)")
+	addKubeConfigFlag(cmd, &kubeConfig)
 }
 
-// AddKubeContextFlag adds a "kubeconfig" flag and a single "kubecontext" flag that can be used once and only once
-func AddKubeContextFlag(cmd *cobra.Command) {
-	AddKubeConfigFlag(cmd)
-	cmd.PersistentFlags().StringVar(&kubeContext, "kubecontext", "", "kubeconfig context to use")
+func addKubeConfigFlag(cmd *cobra.Command, variable *string) {
+	cmd.PersistentFlags().StringVar(variable, "kubeconfig", "", "absolute path(s) to the kubeconfig file(s)")
 }
 
-// AddKubeContextMultiFlag adds a "kubeconfig" flag and a "kubecontext" flag that can be specified multiple times (or comma separated)
-func AddKubeContextMultiFlag(cmd *cobra.Command, usage string) {
-	AddKubeConfigFlag(cmd)
-	if usage == "" {
-		usage = "comma-separated list of kubeconfig contexts to use, can be specified multiple times.\n" +
-			"If none specified, all contexts referenced by the kubeconfig are used"
-	}
+// addKubeContextFlag adds a "kubeconfig" flag and a single "kubecontext" flag that can be used once and only once
+func addKubeContextFlag(cmd *cobra.Command) {
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	loadingRules.DefaultClientConfig = &clientcmd.DefaultClientConfig
+	overrides := clientcmd.ConfigOverrides{}
+	kflags := clientcmd.RecommendedConfigOverrideFlags("kube")
+	addKubeConfigFlag(cmd, &loadingRules.ExplicitPath)
+	clientcmd.BindOverrideFlags(&overrides, cmd.PersistentFlags(), kflags)
+	clientConfig = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, &overrides)
+}
 
-	cmd.PersistentFlags().StringSliceVar(&kubeContexts, "kubecontexts", nil, usage)
+// addKubeContextMultiFlag adds a "kubeconfig" flag and a "kubecontext" flag that can be specified multiple times (or comma separated)
+func AddKubeContextMultiFlag(cmd *cobra.Command) {
+	AddKubeConfigFlag(cmd)
+	cmd.PersistentFlags().StringSliceVar(&kubeContexts, "kubecontexts", nil,
+		"comma separated list of kubeconfig contexts to use, can be specified multiple times.\n"+
+			"If none specified, all contexts referenced by kubeconfig are used")
 }
 
 const (
 	OperatorNamespace = "submariner-operator"
 )
+
+// exitOnError will print your error nicely and exit in case of error
+func exitOnError(message string, err error) {
+	utils.ExitOnError(message, err)
+}
+
+func getClusterNameFromContext(rawConfig clientcmdapi.Config) *string {
+	configContext, ok := rawConfig.Contexts[rawConfig.CurrentContext]
+	if !ok {
+		return nil
+	}
+	return &configContext.Cluster
+}
+
+func getRestConfig() (*rest.Config, error) {
+	return clientConfig.ClientConfig()
+}
+
+func getClientConfig() clientcmd.ClientConfig {
+	return clientConfig
+}
 
 func handleNodeLabels(config *rest.Config) error {
 	_, clientset, err := restconfig.Clients(config)
@@ -212,7 +241,7 @@ var nodeLabelBackoff wait.Backoff = wait.Backoff{
 }
 
 func CheckVersionMismatch(cmd *cobra.Command, args []string) error {
-	config, err := restconfig.ForCluster(kubeConfig, kubeContext)
+	config, err := getRestConfig()
 	utils.ExitOnError("The provided kubeconfig is invalid", err)
 
 	submariner := getSubmarinerResource(config)

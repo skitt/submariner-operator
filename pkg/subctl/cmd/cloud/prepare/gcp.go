@@ -59,7 +59,7 @@ func prepareGCP(cmd *cobra.Command, args []string) {
 		},
 	}
 
-	err := gcp.RunOnGCP(gcpGWInstanceType, *kubeConfig, *kubeContext, dedicatedGateway,
+	err := gcp.RunOnGCP(gcpGWInstanceType, clientConfig, dedicatedGateway,
 		func(cloud api.Cloud, gwDeployer api.GatewayDeployer, reporter api.Reporter) error {
 			if gateways > 0 {
 				gwInput := api.GatewayDeployInput{

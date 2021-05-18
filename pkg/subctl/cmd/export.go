@@ -66,7 +66,7 @@ func exportService(cmd *cobra.Command, args []string) {
 	err := validateArguments(args)
 	utils.ExitOnError("Insufficient arguments", err)
 
-	clientConfig := restconfig.ClientConfig(kubeConfig, kubeContext)
+	clientConfig := getClientConfig()
 	restConfig, err := clientConfig.ClientConfig()
 
 	utils.ExitOnError("Error connecting to the target cluster", err)

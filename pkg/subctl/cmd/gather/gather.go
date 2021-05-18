@@ -73,7 +73,7 @@ var gatherFuncs = map[string]func(string, Info) bool{
 }
 
 func init() {
-	cmd.AddKubeContextMultiFlag(gatherCmd, "")
+	cmd.AddKubeContextMultiFlag(gatherCmd)
 	addGatherFlags(gatherCmd)
 	cmd.AddToRootCommand(gatherCmd)
 }
