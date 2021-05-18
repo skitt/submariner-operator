@@ -64,10 +64,12 @@ func init() {
 }
 
 func validateTunnelConfig(cmd *cobra.Command, args []string) {
-	localCfg, err := getRestConfig(args[0], "")
+	// This is wrong
+	localCfg, err := getRestConfig()
 	exitOnError("The provided local kubeconfig is invalid", err)
 
-	remoteCfg, err := getRestConfig(args[1], "")
+	// This is wrong
+	remoteCfg, err := getRestConfig()
 	exitOnError("The provided remote kubeconfig is invalid", err)
 
 	validationStatus := validateTunnelConfigAcrossClusters(localCfg, remoteCfg)

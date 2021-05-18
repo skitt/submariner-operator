@@ -32,6 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 const (
@@ -47,12 +48,12 @@ func AddAWSFlags(command *cobra.Command, infraID, region *string) {
 
 // RunOnAWS runs the given function on AWS, supplying it with a cloud instance connected to AWS and a reporter that writes to CLI.
 // The functions makes sure that infraID and region are specified, and extracts the credentials from a secret in order to connect to AWS.
-func RunOnAWS(infraID, region, gwInstanceType, kubeConfig, kubeContext string,
+func RunOnAWS(infraID, region, gwInstanceType string, clientConfig *clientcmd.ClientConfig,
 	function func(cloud api.Cloud, reporter api.Reporter) error) error {
 	utils.ExpectFlag(infraIDFlag, infraID)
 	utils.ExpectFlag(regionFlag, region)
 
-	k8sConfig, err := utils.GetRestConfig(kubeConfig, kubeContext)
+	k8sConfig, err := (*clientConfig).ClientConfig()
 	utils.ExitOnError("Failed to initialize a Kubernetes config", err)
 
 	reporter := NewCLIReporter()

@@ -193,9 +193,9 @@ func configureTestingFramework(args []string) error {
 }
 
 func clusterNameFromConfig(kubeConfigPath, kubeContext string) string {
-	rawConfig, err := getClientConfig(kubeConfigPath, "").RawConfig()
+	rawConfig, err := getClientConfig().RawConfig()
 	exitOnError(fmt.Sprintf("Error obtaining the kube config for path %q", kubeConfigPath), err)
-	cluster := getClusterNameFromContext(rawConfig, kubeContext)
+	cluster := getClusterNameFromContext(rawConfig)
 	if cluster == nil {
 		exitWithErrorMsg(fmt.Sprintf("Could not obtain the cluster name from kube config: %#v", rawConfig))
 	}
