@@ -20,18 +20,19 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/submariner-io/submariner-operator/pkg/subctl/cmd/cloud/cleanup"
 	"github.com/submariner-io/submariner-operator/pkg/subctl/cmd/cloud/prepare"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // NewCommand returns a new cobra.Command used to prepare a cloud infrastructure
-func NewCommand(origKubeConfig, origKubeContext *string) *cobra.Command {
+func NewCommand(clientConfig *clientcmd.ClientConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cloud",
 		Short: "Cloud operations",
 		Long:  `This command contains cloud operations related to Submariner installation.`,
 	}
 
-	cmd.AddCommand(prepare.NewCommand(origKubeConfig, origKubeContext))
-	cmd.AddCommand(cleanup.NewCommand(origKubeConfig, origKubeContext))
+	cmd.AddCommand(prepare.NewCommand(clientConfig))
+	cmd.AddCommand(cleanup.NewCommand(clientConfig))
 
 	return cmd
 }

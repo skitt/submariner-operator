@@ -44,7 +44,7 @@ func newAWSCleanupCommand() *cobra.Command {
 }
 
 func cleanupAws(cmd *cobra.Command, args []string) {
-	err := cloudutils.RunOnAWS(infraID, region, "", *kubeConfig, *kubeContext,
+	err := cloudutils.RunOnAWS(infraID, region, "", clientConfig,
 		func(cloud api.Cloud, reporter api.Reporter) error {
 			return cloud.CleanupAfterSubmariner(reporter)
 		})

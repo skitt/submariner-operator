@@ -58,7 +58,7 @@ func prepareAws(cmd *cobra.Command, args []string) {
 		},
 		Gateways: gateways,
 	}
-	err := cloudutils.RunOnAWS(infraID, region, gwInstanceType, *kubeConfig, *kubeContext,
+	err := cloudutils.RunOnAWS(infraID, region, gwInstanceType, clientConfig,
 		func(cloud api.Cloud, reporter api.Reporter) error {
 			return cloud.PrepareForSubmariner(input, reporter)
 		})

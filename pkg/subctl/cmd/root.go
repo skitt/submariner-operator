@@ -47,12 +47,12 @@ import (
 
 var (
 	kubeConfig   string
-	kubeContext  string
 	kubeContexts []string
 	rootCmd      = &cobra.Command{
 		Use:   "subctl",
 		Short: "An installer for Submariner",
 	}
+	clientConfig clientcmd.ClientConfig
 )
 
 func Execute() error {
@@ -61,24 +61,29 @@ func Execute() error {
 
 func init() {
 	rootCmd.AddCommand(cmdversion.Cmd)
-	cloudCmd := cloud.NewCommand(&kubeConfig, &kubeContext)
+	cloudCmd := cloud.NewCommand(&clientConfig)
 	addKubeContextFlag(cloudCmd)
 	rootCmd.AddCommand(cloudCmd)
 }
 
-func addKubeConfigFlag(cmd *cobra.Command) {
-	cmd.PersistentFlags().StringVar(&kubeConfig, "kubeconfig", "", "absolute path(s) to the kubeconfig file(s)")
+func addKubeConfigFlag(cmd *cobra.Command, variable *string) {
+	cmd.PersistentFlags().StringVar(variable, "kubeconfig", "", "absolute path(s) to the kubeconfig file(s)")
 }
 
 // addKubeContextFlag adds a "kubeconfig" flag and a single "kubecontext" flag that can be used once and only once
 func addKubeContextFlag(cmd *cobra.Command) {
-	addKubeConfigFlag(cmd)
-	cmd.PersistentFlags().StringVar(&kubeContext, "kubecontext", "", "kubeconfig context to use")
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	loadingRules.DefaultClientConfig = &clientcmd.DefaultClientConfig
+	overrides := clientcmd.ConfigOverrides{}
+	kflags := clientcmd.RecommendedConfigOverrideFlags("kube")
+	addKubeConfigFlag(cmd, &loadingRules.ExplicitPath)
+	clientcmd.BindOverrideFlags(&overrides, cmd.PersistentFlags(), kflags)
+	clientConfig = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, &overrides)
 }
 
 // addKubeContextMultiFlag adds a "kubeconfig" flag and a "kubecontext" flag that can be specified multiple times (or comma separated)
 func addKubeContextMultiFlag(cmd *cobra.Command) {
-	addKubeConfigFlag(cmd)
+	addKubeConfigFlag(cmd, &kubeConfig)
 	cmd.PersistentFlags().StringSliceVar(&kubeContexts, "kubecontexts", nil,
 		"comma separated list of kubeconfig contexts to use, can be specified multiple times.\n"+
 			"If none specified, all contexts referenced by kubeconfig are used")
@@ -113,24 +118,20 @@ func getClients(config *rest.Config) (dynamic.Interface, kubernetes.Interface, e
 	return dynClient, clientSet, nil
 }
 
-func getClusterNameFromContext(rawConfig clientcmdapi.Config, overridesContext string) *string {
-	if overridesContext == "" {
-		// No context provided, use the current context
-		overridesContext = rawConfig.CurrentContext
-	}
-	configContext, ok := rawConfig.Contexts[overridesContext]
+func getClusterNameFromContext(rawConfig clientcmdapi.Config) *string {
+	configContext, ok := rawConfig.Contexts[rawConfig.CurrentContext]
 	if !ok {
 		return nil
 	}
 	return &configContext.Cluster
 }
 
-func getRestConfig(kubeConfigPath, kubeContext string) (*rest.Config, error) {
-	return utils.GetRestConfig(kubeConfigPath, kubeContext)
+func getRestConfig() (*rest.Config, error) {
+	return clientConfig.ClientConfig()
 }
 
-func getClientConfig(kubeConfigPath, kubeContext string) clientcmd.ClientConfig {
-	return utils.GetClientConfig(kubeConfigPath, kubeContext)
+func getClientConfig() clientcmd.ClientConfig {
+	return clientConfig
 }
 
 func handleNodeLabels(config *rest.Config) error {
@@ -250,7 +251,7 @@ var nodeLabelBackoff wait.Backoff = wait.Backoff{
 }
 
 func checkVersionMismatch(cmd *cobra.Command, args []string) error {
-	config, err := getRestConfig(kubeConfig, kubeContext)
+	config, err := getRestConfig()
 	exitOnError("The provided kubeconfig is invalid", err)
 
 	submariner := getSubmarinerResource(config)

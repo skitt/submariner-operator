@@ -106,7 +106,7 @@ var deployBroker = &cobra.Command{
 		if valid, err := isValidGlobalnetConfig(); !valid {
 			exitOnError("Invalid GlobalCIDR configuration", err)
 		}
-		config, err := getRestConfig(kubeConfig, kubeContext)
+		config, err := getRestConfig()
 		exitOnError("The provided kubeconfig is invalid", err)
 
 		status := cli.NewStatus()
