@@ -1,19 +1,24 @@
-.dapper
-bin/
-build/_output/
-dist/
-deploy/crds
-deploy/submariner/crds
-deploy/lighthouse/crds
-config/bundle/kustomization.yaml
-config/bundle/patches/submariner.csv.config.yaml
-package/.image.*
-output/
-vendor/
-*.coverprofile
-.idea
-.shflags
-junit.xml
-Makefile.dapper
-Dockerfile.*
 
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin
+testbin/*
+
+# Test binary, build with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Vendored files
+vendor
+
+# editor and IDE paraphernalia
+.idea
+*.swp
+*.swo
+*~
