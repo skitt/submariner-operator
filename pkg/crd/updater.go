@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 type baseUpdater interface {
@@ -44,6 +45,7 @@ type baseUpdater interface {
 type Updater interface {
 	baseUpdater
 	CreateOrUpdateFromEmbedded(context.Context, string) (bool, error)
+	CreateOrUpdateOwnedFromEmbedded(context.Context, metav1.Object, *runtime.Scheme, string) (bool, error)
 }
 
 type updater struct {
@@ -80,6 +82,23 @@ func (u *updater) CreateOrUpdateFromEmbedded(ctx context.Context, crdYaml string
 		return false, errors.Wrap(err, "error extracting embedded CRD")
 	}
 
+	return u.createOrUpdate(ctx, crd)
+}
+
+func (u *updater) CreateOrUpdateOwnedFromEmbedded(ctx context.Context, owner metav1.Object, scheme *runtime.Scheme, crdYaml string,
+) (bool, error) {
+	crd := &apiextensions.CustomResourceDefinition{}
+
+	if err := embeddedyamls.GetObject(crdYaml, crd); err != nil {
+		return false, errors.Wrap(err, "error extracting embedded CRD")
+	}
+
+	controllerutil.SetControllerReference(owner, crd, scheme)
+
+	return u.createOrUpdate(ctx, crd)
+}
+
+func (u *updater) createOrUpdate(ctx context.Context, crd *apiextensions.CustomResourceDefinition) (bool, error) {
 	return resourceutil.CreateOrUpdate(ctx, &resource.InterfaceFuncs{
 		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
 			return u.Get(ctx, name, options)
