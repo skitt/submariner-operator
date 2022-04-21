@@ -42,8 +42,8 @@ require (
 	github.com/xlab/treeprint v1.1.0 // indirect
 	go.starlark.net v0.0.0-20210506034541-84642328b1f0 // indirect
 	go.uber.org/zap v1.17.0 // indirect
-	golang.org/x/oauth2 v0.0.0-20220309155454-6242fa91716a
-	google.golang.org/api v0.74.0
+	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5
+	google.golang.org/api v0.75.0
 	k8s.io/api v0.21.0
 	k8s.io/apiextensions-apiserver v0.20.1
 	k8s.io/apimachinery v0.21.0
