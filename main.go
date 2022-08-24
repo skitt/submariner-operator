@@ -27,7 +27,6 @@ import (
 
 	// TODO: in operator-sdk v1 the below utilities were moved to internal.
 	"github.com/operator-framework/operator-lib/leader"
-	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	"github.com/submariner-io/admiral/pkg/log/kzerolog"
 	"github.com/submariner-io/submariner-operator/api/v1alpha1"
 	"github.com/submariner-io/submariner-operator/controllers"
@@ -66,7 +65,6 @@ var (
 func printVersion() {
 	log.Info(fmt.Sprintf("Go Version: %s", runtime.Version()))
 	log.Info(fmt.Sprintf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
-	log.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
 	log.Info(fmt.Sprintf("Submariner operator version: %v", version.Version))
 }
 
