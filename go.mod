@@ -1,6 +1,6 @@
 module github.com/submariner-io/submariner-operator
 
-go 1.18
+go 1.19
 
 require (
 	github.com/coreos/go-semver v0.3.0
