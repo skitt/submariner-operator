@@ -23,7 +23,14 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
 )
+
+var _ = BeforeSuite(func() {
+	utilruntime.Must(apiextensions.AddToScheme(scheme.Scheme))
+})
 
 func TestCRDs(t *testing.T) {
 	RegisterFailHandler(Fail)
