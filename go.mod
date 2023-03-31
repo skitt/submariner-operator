@@ -14,7 +14,7 @@ require (
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.63.0
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.63.0
 	github.com/prometheus/client_golang v1.14.0
-	github.com/submariner-io/admiral v0.15.0-m4.0.20230331195145-3cc2820c0292
+	github.com/submariner-io/admiral v0.15.0-m4.0.20230403075645-99e82f0c485d
 	github.com/submariner-io/shipyard v0.15.0-m4
 	github.com/submariner-io/submariner v0.15.0-m4.0.20230331190215-45739cc79971
 	github.com/uw-labs/lichen v0.1.7
